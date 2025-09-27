@@ -2,9 +2,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Clock, Star, History, X } from "lucide-react";
+import { Clock, Star, History, X, Download, BarChart2 } from "lucide-react";
 import QueryHistory from "../components/QueryHistory";
 import SmartSuggestions from "../components/SmartSuggestions";
+import ExportMenu from "../components/ExportMenu";
+import NaturalLanguageFilterBar from "../components/NaturalLanguageFilterBar";
+import DataVisualization from "../components/DataVisualization"; //VisualizationToggle,
 import QueryHistoryManager from "../lib/queryHistory";
 import { SmartSuggestionsEngine } from "../lib/smartSuggestions";
 import { QueryHistoryItem } from "@/types/query";
@@ -36,17 +39,24 @@ export default function Home() {
   const [useCache, setUseCache] = useState(true);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
 
-  // New state for history and suggestions
+  // History and suggestions state
   const [history, setHistory] = useState<QueryHistoryItem[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showFavorites, setShowFavorites] = useState(false);
 
+  // New states for export, filter, and visualization features
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [currentQueryItem, setCurrentQueryItem] =
+    useState<QueryHistoryItem | null>(null);
+  const [filteredResults, setFilteredResults] = useState<any[] | null>(null);
+  const [showChart, setShowChart] = useState(false);
+
   const historyManager = useRef(QueryHistoryManager.getInstance());
   const suggestionsEngine = useRef(SmartSuggestionsEngine.getInstance());
 
-  // Fetch cache stats on mount and after queries
+  // Fetch cache stats
   const fetchCacheStats = async () => {
     try {
       const response = await fetch("/api/cache");
@@ -59,7 +69,6 @@ export default function Home() {
 
   useEffect(() => {
     fetchCacheStats();
-    // Load initial history
     setHistory(historyManager.current.getHistory());
   }, []);
 
@@ -67,67 +76,102 @@ export default function Home() {
     const queryText = questionText || question;
     if (!queryText.trim()) return;
 
-    setQuestion(questionText || question);
     setLoading(true);
     setResult(null);
     setSuggestions([]);
+    setFilteredResults(null);
+    setShowChart(false);
 
     try {
       const response = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: queryText, useCache }),
+        body: JSON.stringify({
+          question: queryText,
+          useCache,
+        }),
       });
 
       const data = await response.json();
-      setResult(data);
 
-      // Add to history
-      if (data.success || data.error) {
-        const queryItem = historyManager.current.addQuery(data);
-        setHistory([...historyManager.current.getHistory()]);
+      if (data.success) {
+        // Create QueryHistoryItem for successful query
+        const queryItem: QueryHistoryItem = {
+          id: crypto.randomUUID(),
+          question: queryText,
+          sql: data.sql,
+          results: data.results,
+          interpretation: data.interpretation,
+          execution_time: data.queryTime,
+          timestamp: new Date(),
+          favorite: false,
+          fromCache: data.fromCache,
+        };
 
-        // Generate smart suggestions for successful queries
-        if (data.success && data.results && data.results.length > 0) {
-          setSuggestionsLoading(true);
-          setTimeout(() => {
-            const newSuggestions =
-              suggestionsEngine.current.generateSuggestions(
-                queryText,
-                data.sql,
-                data.results
-              );
-            setSuggestions(newSuggestions);
-            setSuggestionsLoading(false);
-          }, 500);
+        // Save to history
+        const savedQuery = historyManager.current.addQuery(queryItem);
+        setCurrentQueryItem(savedQuery);
+        setHistory(historyManager.current.getHistory());
+
+        // Generate suggestions
+        setSuggestionsLoading(true);
+        try {
+          const newSuggestions =
+            await suggestionsEngine.current.generateSuggestions(
+              queryText,
+              data.sql,
+              data.results
+            );
+          setSuggestions(newSuggestions);
+        } catch (error) {
+          console.error("Failed to generate suggestions:", error);
+        } finally {
+          setSuggestionsLoading(false);
         }
+      } else if (data.error) {
+        // Still save failed queries to history
+        const failedQuery: QueryHistoryItem = {
+          id: crypto.randomUUID(),
+          question: queryText,
+          timestamp: new Date(),
+          favorite: false,
+          error: data.error,
+        };
+        historyManager.current.addQuery(failedQuery);
+        setHistory(historyManager.current.getHistory());
       }
 
-      // Update cache stats after query
+      setResult(data);
       fetchCacheStats();
     } catch (error) {
-      const errorResult = {
+      console.error("Query failed:", error);
+      setResult({
         success: false,
         error: "Failed to connect to server",
-        question: queryText,
-        sql: "",
-        results: [],
-        timestamp: new Date().toISOString(),
-      };
-      setResult(errorResult);
-
-      // Add failed query to history
-      historyManager.current.addQuery(errorResult);
-      setHistory([...historyManager.current.getHistory()]);
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const handleSelectQuery = (query: QueryHistoryItem) => {
-    askQuestion(query.question);
-    setShowHistory(false);
-    setShowFavorites(false);
+    setQuestion(query.question);
+    if (query.results) {
+      setResult({
+        success: true,
+        question: query.question,
+        sql: query.sql,
+        results: query.results,
+        interpretation: query.interpretation,
+        queryTime: query.execution_time,
+        fromCache: query.fromCache,
+      });
+      setCurrentQueryItem(query);
+      setFilteredResults(null);
+      setShowChart(false);
+    } else {
+      askQuestion(query.question);
+    }
   };
 
   const handleToggleFavorite = (id: string) => {
@@ -135,17 +179,12 @@ export default function Home() {
     setHistory([...historyManager.current.getHistory()]);
   };
 
-  const handleSelectSuggestion = (suggestion: string) => {
-    askQuestion(suggestion);
-  };
-
   const clearCache = async () => {
     try {
       await fetch("/api/cache", { method: "DELETE" });
       fetchCacheStats();
-      alert("Cache cleared successfully");
     } catch (error) {
-      alert("Failed to clear cache");
+      console.error("Failed to clear cache:", error);
     }
   };
 
@@ -157,10 +196,13 @@ export default function Home() {
     return String(value);
   };
 
+  // Get the data to display (filtered or original)
+  const displayData = filteredResults || result?.results || [];
+
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto p-6">
-        {/* Header with cache stats and history controls */}
+        {/* Header */}
         <div className="mb-8 flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -229,10 +271,10 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="flex gap-6">
+        <div className="flex gap-6 min-w-0">
           {/* Sidebar for History */}
           {(showHistory || showFavorites) && (
-            <div className="w-80 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="w-80 flex-shrink-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-semibold text-gray-900">
                   {showFavorites ? "Favorites" : "Query History"}
@@ -258,7 +300,7 @@ export default function Home() {
           )}
 
           {/* Main Content */}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0 overflow-hidden">
             {/* Input Section */}
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
               <div className="flex gap-3 mb-3">
@@ -278,11 +320,18 @@ export default function Home() {
                   disabled={loading}
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {loading ? "Thinking..." : "Ask"}
+                  {loading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      <span>Analyzing...</span>
+                    </div>
+                  ) : (
+                    "Ask Question"
+                  )}
                 </button>
               </div>
 
-              {/* Cache toggle */}
+              {/* Cache Toggle */}
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -295,153 +344,194 @@ export default function Home() {
                   Use cache for faster responses
                 </label>
               </div>
-
-              {/* Sample questions */}
-              <div className="mt-4 flex flex-wrap gap-2">
-                <span className="text-sm text-gray-500">Try:</span>
-                {[
-                  "How many transactions failed today?",
-                  "Top 10 merchants by volume",
-                  "Average transaction amount this week",
-                  "Users with more than 5 transactions",
-                ].map((sample) => (
-                  <button
-                    key={sample}
-                    onClick={() => setQuestion(sample)}
-                    className="text-sm px-3 py-1 bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
-                  >
-                    {sample}
-                  </button>
-                ))}
-              </div>
             </div>
 
-            {/* Results Section */}
-            {result && (
-              <div className="space-y-6">
-                {result.success ? (
-                  <>
-                    {/* Interpretation with cache indicator */}
-                    <div className="bg-white rounded-lg shadow-sm p-6">
-                      <div className="flex justify-between items-center mb-3">
-                        <h2 className="text-lg font-semibold text-gray-900">
-                          Answer
-                        </h2>
-                        {result.fromCache && (
-                          <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
-                            ⚡ From Cache
-                          </span>
-                        )}
-                      </div>
-                      <div className="prose max-w-none text-gray-700 whitespace-pre-wrap">
-                        {result.interpretation}
-                      </div>
-                      {result.timestamp && (
-                        <div className="mt-3 text-xs text-gray-500">
-                          Generated:{" "}
-                          {new Date(result.timestamp).toLocaleString()}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* SQL Query */}
-                    <div className="bg-gray-900 rounded-lg shadow-sm p-6">
-                      <div className="flex justify-between items-center mb-3">
-                        <h2 className="text-lg font-semibold text-gray-100">
-                          Generated SQL
-                        </h2>
-                        <span className="text-sm text-gray-400">
-                          {result.queryTime}ms • {result.rowCount} rows
-                        </span>
-                      </div>
-                      <pre className="text-sm text-gray-300 overflow-x-auto">
-                        <code>{result.sql}</code>
-                      </pre>
-                    </div>
-
-                    {/* Data Table */}
-                    {result.results && result.results.length > 0 && (
-                      <div className="bg-white rounded-lg shadow-sm p-6">
-                        <div className="flex justify-between items-center mb-3">
-                          <h2 className="text-lg font-semibold text-gray-900">
-                            Results {result.truncated && "(first 100 rows)"}
-                          </h2>
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                {Object.keys(result.results[0]).map((key) => (
-                                  <th
-                                    key={key}
-                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                  >
-                                    {key}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                              {result.results.map((row, idx) => (
-                                <tr key={idx} className="hover:bg-gray-50">
-                                  {Object.values(row).map((value, vidx) => (
-                                    <td
-                                      key={vidx}
-                                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
-                                    >
-                                      {formatValue(value)}
-                                    </td>
-                                  ))}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-                    <h3 className="text-red-800 font-semibold mb-2">Error</h3>
-                    <p className="text-red-600">{result.error}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Smart Suggestions */}
-            {(suggestions.length > 0 || suggestionsLoading) && (
+            {suggestions.length > 0 && (
               <SmartSuggestions
                 suggestions={suggestions}
-                onSelectSuggestion={handleSelectSuggestion}
+                onSelectSuggestion={(suggestion) => {
+                  setQuestion(suggestion);
+                  askQuestion(suggestion);
+                }}
                 loading={suggestionsLoading}
               />
             )}
 
-            {/* Sample Questions - Show when no history and no results */}
-            {history.length === 0 && !result && !loading && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mt-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                  Get started with these examples
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {[
-                    "How many transactions were processed yesterday?",
-                    "Which merchants have the highest success rates?",
-                    "What's the average transaction amount by payment method?",
-                    "Show me users who signed up this week",
-                    "Which payment methods have the highest decline rates?",
-                    "What are the top 10 transactions by amount today?",
-                  ].map((sampleQuestion, index) => (
-                    <button
-                      key={index}
-                      onClick={() => askQuestion(sampleQuestion)}
-                      className="p-3 text-left border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all"
-                    >
-                      <p className="text-sm text-gray-700">{sampleQuestion}</p>
-                    </button>
-                  ))}
-                </div>
+            {/* Results Section */}
+            {result && (
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                {result.success ? (
+                  <>
+                    {/* Result Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-xl font-semibold text-gray-900">
+                        Results
+                      </h2>
+                      <div className="flex items-center gap-3">
+                        {/* Export Menu */}
+                        {currentQueryItem && currentQueryItem.results && (
+                          <div className="relative">
+                            <button
+                              onClick={() => setShowExportMenu(!showExportMenu)}
+                              className="flex items-center space-x-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                            >
+                              <Download className="h-4 w-4" />
+                              <span>Export & Share</span>
+                            </button>
+                            {showExportMenu && (
+                              <ExportMenu
+                                query={currentQueryItem}
+                                onClose={() => setShowExportMenu(false)}
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        {/* Visualization Toggle */}
+                        {result.results && result.results.length > 0 && (
+                          <button
+                            onClick={() => setShowChart(!showChart)}
+                            className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                              showChart
+                                ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            }`}
+                          >
+                            <BarChart2 className="h-4 w-4" />
+                            <span>
+                              {showChart ? "Hide Chart" : "Show Chart"}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Interpretation */}
+                    {result.interpretation && (
+                      <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+                        <p className="text-blue-900">{result.interpretation}</p>
+                      </div>
+                    )}
+
+                    {/* Metadata */}
+                    <div className="flex gap-4 text-sm text-gray-600 mb-4">
+                      <span>
+                        {result.rowCount} row{result.rowCount !== 1 ? "s" : ""}{" "}
+                        returned
+                      </span>
+                      {result.queryTime && (
+                        <span>Query took {result.queryTime}ms</span>
+                      )}
+                      {result.fromCache && (
+                        <span className="text-green-600">📦 From cache</span>
+                      )}
+                    </div>
+
+                    {/* SQL Query */}
+                    {result.sql && (
+                      <details className="mb-4">
+                        <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-900">
+                          View SQL Query
+                        </summary>
+                        <pre className="mt-2 p-3 bg-gray-100 rounded text-xs overflow-x-auto">
+                          {result.sql}
+                        </pre>
+                      </details>
+                    )}
+
+                    {/* Natural Language Filter */}
+                    {result.results && result.results.length > 0 && (
+                      <NaturalLanguageFilterBar
+                        originalResults={result.results}
+                        onFilter={(filtered, message) => {
+                          setFilteredResults(filtered);
+                        }}
+                        onClear={() => setFilteredResults(null)}
+                      />
+                    )}
+
+                    {/* Data Display - Chart or Table */}
+                    {showChart &&
+                    result.results &&
+                    result.results.length > 0 ? (
+                      <DataVisualization
+                        data={displayData}
+                        columns={Object.keys(result.results[0])}
+                      />
+                    ) : (
+                      /* Data Table */
+                      result.results &&
+                      result.results.length > 0 && (
+                        <div className="mt-4">
+                          {/* Table Container with controlled width */}
+                          <div className="w-full overflow-hidden border border-gray-200 rounded-lg">
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    {Object.keys(result.results[0]).map(
+                                      (col) => (
+                                        <th
+                                          key={col}
+                                          className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                        >
+                                          {/* Truncate long column names */}
+                                          <div
+                                            className="truncate max-w-[200px]"
+                                            title={col}
+                                          >
+                                            {col}
+                                          </div>
+                                        </th>
+                                      )
+                                    )}
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  {displayData.map((row, i) => (
+                                    <tr key={i} className="hover:bg-gray-50">
+                                      {Object.entries(row).map(
+                                        ([key, val], j) => (
+                                          <td
+                                            key={j}
+                                            className="px-3 py-2 text-sm text-gray-900"
+                                          >
+                                            {/* Smart value formatting with truncation */}
+                                            <div
+                                              className="max-w-[300px] truncate"
+                                              title={String(formatValue(val))}
+                                            >
+                                              {formatValue(val)}
+                                            </div>
+                                          </td>
+                                        )
+                                      )}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          {/* Optional: Show message if table is scrollable */}
+                          {result.results &&
+                            Object.keys(result.results[0]).length > 5 && (
+                              <p className="text-xs text-gray-500 mt-2 text-center">
+                                ← Scroll horizontally to see more columns →
+                              </p>
+                            )}
+                        </div>
+                      )
+                    )}
+                  </>
+                ) : (
+                  /* Error State */
+                  <div className="text-red-600">
+                    <h3 className="font-semibold mb-2">Error</h3>
+                    <p>{result.error}</p>
+                  </div>
+                )}
               </div>
             )}
           </div>

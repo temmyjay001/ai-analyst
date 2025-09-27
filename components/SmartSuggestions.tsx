@@ -18,7 +18,7 @@ export default function SmartSuggestions({
   suggestions,
   onSelectSuggestion,
   loading = false,
-}: SmartSuggestionsProps) {
+}: Readonly<SmartSuggestionsProps>) {
   const getCategoryIcon = (category: string) => {
     switch (category) {
       case "drill-down":
