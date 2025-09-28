@@ -68,16 +68,16 @@ export async function getSchemaContext() {
     }));
 
     // Get sample data for each table (just 2 rows to keep context small)
-    for (const table of tables) {
-      try {
-        const sampleResult = await query(
-          `SELECT * FROM ${table.table_name} LIMIT 2`
-        );
-        table.sample_data = sampleResult.rows;
-      } catch (err) {
-        console.log(`Could not get sample data for ${table.table_name}`);
-      }
-    }
+    //for (const table of tables) {
+    //  try {
+    //      const sampleResult = await query(
+    //        `SELECT * FROM ${table.table_name} LIMIT 2`
+    //      );
+    //      table.sample_data = sampleResult.rows;
+    //    } catch (err) {
+    //      console.log(`Could not get sample data for ${table.table_name}`);
+    //    }
+    //    }
 
     return {
       tables,
@@ -109,13 +109,13 @@ function formatForAI(tables: TableSchema[]): string {
       }
     }
 
-    if (table.sample_data && table.sample_data.length > 0) {
-      context += `Sample row: ${JSON.stringify(
-        table.sample_data[0],
-        null,
-        2
-      )}\n`;
-    }
+    //if (table.sample_data && table.sample_data.length > 0) {
+    //context += `Sample row: ${JSON.stringify(
+    //table.sample_data[0],
+    //null,
+    //2
+    //  )}\n`;
+    //}
 
     context += "\n";
   }

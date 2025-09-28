@@ -1,6 +1,6 @@
 // lib/ai.ts
-// Using Groq (free and fast!)
-const GROQ_API_KEY = process.env.GROQ_API_KEY!;
+// Updated to use Google Gemini instead of Groq
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY!;
 
 export async function generateSQL(
   question: string,
@@ -12,47 +12,75 @@ ${schemaContext}
 
 User question: ${question}
 
-Return ONLY the SQL query, no explanations or markdown.`;
+IMPORTANT:
+- Return ONLY the SQL query, no explanations or markdown
+- Use proper PostgreSQL syntax
+- Add LIMIT clauses for queries that might return many rows
+- Use appropriate JOINs based on the foreign key relationships shown in the schema`;
 
   const response = await fetch(
-    "https://api.groq.com/openai/v1/chat/completions",
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "meta-llama/llama-4-scout-17b-16e-instruct", // Or 'llama2-70b-4096' - both free!
-        messages: [
+        contents: [
           {
-            role: "system",
-            content:
-              "You are a PostgreSQL expert. Generate only SQL queries, no explanations.",
-          },
-          {
-            role: "user",
-            content: prompt,
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
           },
         ],
-        temperature: 0.1,
-        max_tokens: 500,
+        generationConfig: {
+          temperature: 0.1,
+          topK: 32,
+          topP: 1,
+          maxOutputTokens: 500,
+          stopSequences: [],
+        },
+        safetySettings: [
+          {
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE",
+          },
+          {
+            category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE",
+          },
+          {
+            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE",
+          },
+          {
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE",
+          },
+        ],
       }),
     }
   );
 
   const data = await response.json();
 
-  if (!data.choices?.[0]?.message?.content) {
-    console.error("Groq AI error:", data);
-    throw new Error("Failed to generate SQL");
+  console.log("Gemini AI response:", JSON.stringify(data, null, 2));
+
+  if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    console.error("Gemini AI error:", data);
+    throw new Error(
+      "Failed to generate SQL: " + (data.error?.message || "Unknown error")
+    );
   }
 
-  // Clean up the response
-  const sql = data.choices[0].message.content
+  // Clean up the response - Gemini sometimes includes markdown
+  const sql = data.candidates[0].content.parts[0].text
     .trim()
     .replace(/```sql\n?/gi, "")
     .replace(/```\n?/gi, "")
+    .replace(/^sql\n/gi, "") // Remove "sql" prefix if present
     .trim();
 
   return sql;
@@ -65,45 +93,90 @@ export async function interpretResults(
   rowCount: number
 ): Promise<string> {
   const prompt = `Question: "${question}"
-Query returned ${rowCount} rows.
-First 5 rows: ${JSON.stringify(results.slice(0, 5), null, 2)}
 
-Write a 2-3 sentence business-friendly summary of these results. Be specific about the numbers.`;
+SQL Query executed:
+${sql}
+
+Query returned ${rowCount} rows.
+Sample results (first 5 rows): ${JSON.stringify(results.slice(0, 5), null, 2)}
+
+Write a clear, business-friendly summary of these results in 2-3 sentences. Focus on:
+- Key insights and patterns
+- Specific numbers and trends
+- Business implications
+
+Be concise and actionable.`;
 
   const response = await fetch(
-    "https://api.groq.com/openai/v1/chat/completions",
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "meta-llama/llama-4-scout-17b-16e-instruct",
-        messages: [
+        contents: [
           {
-            role: "system",
-            content:
-              "You are a data analyst who explains query results clearly and concisely.",
-          },
-          {
-            role: "user",
-            content: prompt,
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
           },
         ],
-        temperature: 0.3,
-        max_tokens: 200,
+        generationConfig: {
+          temperature: 0.3,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 1000,
+        },
       }),
     }
   );
 
   const data = await response.json();
 
-  console.log("AI response:", data);
-
-  if (!data.choices?.[0]?.message?.content) {
+  if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    console.error("Gemini interpretation error:", data);
     return "Results retrieved successfully. Please review the data table below.";
   }
 
-  return data.choices[0].message.content.trim();
+  return data.candidates[0].content.parts[0].text.trim();
+}
+
+// Optional: Function to check if Gemini API is working
+export async function testGeminiConnection(): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: "Hello, respond with just 'OK' if you can read this.",
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            maxOutputTokens: 10,
+          },
+        }),
+      }
+    );
+
+    const data = await response.json();
+    return (
+      data.candidates?.[0]?.content?.parts?.[0]?.text?.includes("OK") || false
+    );
+  } catch (error) {
+    console.error("Gemini connection test failed:", error);
+    return false;
+  }
 }

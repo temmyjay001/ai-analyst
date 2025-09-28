@@ -32,6 +32,29 @@ interface CacheStats {
   queries: { size: number; keys: string[] };
 }
 
+// A simple component to parse and render markdown-like bold text (**text**)
+// and preserve newlines.
+const SimpleMarkdown: React.FC<{ text: string; className?: string }> = ({
+  text,
+  className,
+}) => {
+  const parts = text.split(/(\*\*.*?\*\*|\n)/g);
+
+  return (
+    <p className={className}>
+      {parts.map((part, i) => {
+        // A simple function to remove markdown escape backslashes
+        const unescape = (str: string) => str.replace(/\\(.)/g, "$1");
+        if (part === "\n") return <br key={i} />;
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={i}>{unescape(part.slice(2, -2))}</strong>;
+        }
+        return unescape(part);
+      })}
+    </p>
+  );
+};
+
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
@@ -410,7 +433,10 @@ export default function Home() {
                     {/* Interpretation */}
                     {result.interpretation && (
                       <div className="mb-4 p-4 bg-blue-50 rounded-lg">
-                        <p className="text-blue-900">{result.interpretation}</p>
+                        <SimpleMarkdown
+                          text={result.interpretation}
+                          className="text-blue-900 text-sm"
+                        />
                       </div>
                     )}
 
