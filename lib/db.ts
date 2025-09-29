@@ -1,26 +1,36 @@
 // lib/db.ts
-import { Pool } from "pg";
-import dotenv from "dotenv";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import * as schema from "./schema";
 
-dotenv.config({ path: ".env.local" });
+// Database connection
+const connectionString = process.env.DATABASE_URL!;
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ///ssl:
-  //    process.env.NODE_ENV === "production"
-  //      ? { rejectUnauthorized: false }
-  //      : false,
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
-
-export async function query(text: string, params?: any[]) {
-  const start = Date.now();
-  const res = await pool.query(text, params);
-  const duration = Date.now() - start;
-  console.log("Executed query", { text, duration, rows: res.rowCount });
-  return res;
+if (!connectionString) {
+  throw new Error("DATABASE_URL environment variable is required");
 }
 
-export default pool;
+// Create the connection
+const client = postgres(connectionString, {
+  prepare: false,
+  max: 10,
+  idle_timeout: 20,
+  connect_timeout: 10,
+});
+
+// Create the database instance
+export const db = drizzle(client, { schema });
+
+// Export the client for cleanup if needed
+export { client };
+
+// Types for easier use
+export type User = typeof schema.users.$inferSelect;
+export type NewUser = typeof schema.users.$inferInsert;
+export type DatabaseConnection = typeof schema.databaseConnections.$inferSelect;
+export type NewDatabaseConnection =
+  typeof schema.databaseConnections.$inferInsert;
+export type Query = typeof schema.queries.$inferSelect;
+export type NewQuery = typeof schema.queries.$inferInsert;
+export type Subscription = typeof schema.subscriptions.$inferSelect;
+export type NewSubscription = typeof schema.subscriptions.$inferInsert;

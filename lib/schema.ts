@@ -1,124 +1,183 @@
 // lib/schema.ts
-import { query } from "./db";
+import {
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+  boolean,
+  integer,
+  jsonb,
+  date,
+} from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 
-export interface TableSchema {
-  table_name: string;
-  columns: Array<{
-    column: string;
-    type: string;
-    nullable: boolean;
-  }>;
-  relationships?: Array<{
-    column: string;
-    foreign_table: string;
-    foreign_column: string;
-  }>;
-  sample_data?: any[];
-}
+// Users table
+export const users = pgTable("users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  hashedPassword: varchar("hashed_password", { length: 255 }),
+  avatar: text("avatar"),
+  emailVerified: timestamp("email_verified"),
+  plan: varchar("plan", { length: 50 }).notNull().default("free"), // free, starter, growth, enterprise
+  queryCount: integer("query_count").default(0),
+  lastQueryReset: date("last_query_reset").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
-export async function getSchemaContext() {
-  try {
-    // Get all tables and columns
-    const schemaResult = await query(`
-      SELECT 
-        t.table_name,
-        json_agg(
-          json_build_object(
-            'column', c.column_name,
-            'type', c.data_type,
-            'nullable', c.is_nullable = 'YES'
-          ) ORDER BY c.ordinal_position
-        ) as columns
-      FROM information_schema.tables t
-      JOIN information_schema.columns c 
-        ON t.table_name = c.table_name AND t.table_schema = c.table_schema
-      WHERE t.table_schema = 'public'
-        AND t.table_type = 'BASE TABLE'
-      GROUP BY t.table_name
-      ORDER BY t.table_name
-    `);
+// NextAuth required tables
+export const accounts = pgTable("accounts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 255 }).notNull(),
+  provider: varchar("provider", { length: 255 }).notNull(),
+  providerAccountId: varchar("provider_account_id", { length: 255 }).notNull(),
+  refresh_token: text("refresh_token"),
+  access_token: text("access_token"),
+  expires_at: integer("expires_at"),
+  token_type: varchar("token_type", { length: 255 }),
+  scope: varchar("scope", { length: 255 }),
+  id_token: text("id_token"),
+  session_state: varchar("session_state", { length: 255 }),
+});
 
-    // Get foreign key relationships
-    const fkResult = await query(`
-      SELECT
-        tc.table_name,
-        kcu.column_name,
-        ccu.table_name AS foreign_table,
-        ccu.column_name AS foreign_column
-      FROM information_schema.table_constraints tc
-      JOIN information_schema.key_column_usage kcu
-        ON tc.constraint_name = kcu.constraint_name
-      JOIN information_schema.constraint_column_usage ccu
-        ON ccu.constraint_name = tc.constraint_name
-      WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_schema = 'public'
-    `);
+export const sessions = pgTable("sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sessionToken: varchar("session_token", { length: 255 }).notNull().unique(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expires: timestamp("expires").notNull(),
+});
 
-    // Build schema with relationships
-    const tables: TableSchema[] = schemaResult.rows.map((table) => ({
-      table_name: table.table_name,
-      columns: table.columns,
-      relationships: fkResult.rows
-        .filter((fk) => fk.table_name === table.table_name)
-        .map((fk) => ({
-          column: fk.column_name,
-          foreign_table: fk.foreign_table,
-          foreign_column: fk.foreign_column,
-        })),
-    }));
+export const verificationTokens = pgTable("verification_tokens", {
+  identifier: varchar("identifier", { length: 255 }).notNull(),
+  token: varchar("token", { length: 255 }).notNull().unique(),
+  expires: timestamp("expires").notNull(),
+});
 
-    // Get sample data for each table (just 2 rows to keep context small)
-    //for (const table of tables) {
-    //  try {
-    //      const sampleResult = await query(
-    //        `SELECT * FROM ${table.table_name} LIMIT 2`
-    //      );
-    //      table.sample_data = sampleResult.rows;
-    //    } catch (err) {
-    //      console.log(`Could not get sample data for ${table.table_name}`);
-    //    }
-    //    }
+// Database connections
+export const databaseConnections = pgTable("database_connections", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(), // postgresql, mysql
+  host: varchar("host", { length: 255 }),
+  port: integer("port"),
+  database: varchar("database", { length: 255 }),
+  username: varchar("username", { length: 255 }),
+  passwordEncrypted: text("password_encrypted"), // Encrypted password or full connection URL
+  connectionUrlEncrypted: text("connection_url_encrypted"), // Store full connection URL if provided
+  ssl: boolean("ssl").default(false),
+  isActive: boolean("is_active").default(true),
+  lastTestedAt: timestamp("last_tested_at"),
+  testStatus: varchar("test_status", { length: 50 }).default("pending"), // pending, success, failed
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
-    return {
-      tables,
-      formatted: formatForAI(tables),
-    };
-  } catch (error) {
-    console.error("Schema introspection error:", error);
-    throw error;
-  }
-}
+// Query history
+export const queries = pgTable("queries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  connectionId: uuid("connection_id")
+    .notNull()
+    .references(() => databaseConnections.id, { onDelete: "cascade" }),
+  question: text("question").notNull(),
+  sqlGenerated: text("sql_generated"),
+  results: jsonb("results"),
+  interpretation: text("interpretation"),
+  executionTimeMs: integer("execution_time_ms"),
+  rowCount: integer("row_count"),
+  isFavorite: boolean("is_favorite").default(false),
+  isShared: boolean("is_shared").default(false),
+  error: text("error"),
+  fromCache: boolean("from_cache").default(false),
+  cacheKey: varchar("cache_key", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
-function formatForAI(tables: TableSchema[]): string {
-  let context = "DATABASE SCHEMA:\n\n";
+// Subscriptions (for Stripe integration)
+export const subscriptions = pgTable("subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  stripeCustomerId: varchar("stripe_customer_id", { length: 255 }).notNull(),
+  stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 })
+    .notNull()
+    .unique(),
+  plan: varchar("plan", { length: 50 }).notNull(), // starter, growth, enterprise
+  status: varchar("status", { length: 50 }).notNull(), // active, canceled, past_due, etc.
+  currentPeriodStart: timestamp("current_period_start").notNull(),
+  currentPeriodEnd: timestamp("current_period_end").notNull(),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
-  for (const table of tables) {
-    context += `TABLE: ${table.table_name}\n`;
-    context += `Columns:\n`;
+// Usage tracking
+export const usageTracking = pgTable("usage_tracking", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  date: date("date").notNull(),
+  queryCount: integer("query_count").default(0),
+  aiCostCents: integer("ai_cost_cents").default(0), // Track AI costs in cents
+  exportCount: integer("export_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
-    for (const col of table.columns) {
-      context += `  - ${col.column}: ${col.type}${
-        !col.nullable ? " (required)" : ""
-      }\n`;
-    }
+// Relations
+export const usersRelations = relations(users, ({ many }) => ({
+  accounts: many(accounts),
+  sessions: many(sessions),
+  connections: many(databaseConnections),
+  queries: many(queries),
+  subscriptions: many(subscriptions),
+  usageTracking: many(usageTracking),
+}));
 
-    if (table.relationships && table.relationships.length > 0) {
-      context += `Foreign Keys:\n`;
-      for (const rel of table.relationships) {
-        context += `  - ${rel.column} references ${rel.foreign_table}.${rel.foreign_column}\n`;
-      }
-    }
+export const accountsRelations = relations(accounts, ({ one }) => ({
+  user: one(users, { fields: [accounts.userId], references: [users.id] }),
+}));
 
-    //if (table.sample_data && table.sample_data.length > 0) {
-    //context += `Sample row: ${JSON.stringify(
-    //table.sample_data[0],
-    //null,
-    //2
-    //  )}\n`;
-    //}
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, { fields: [sessions.userId], references: [users.id] }),
+}));
 
-    context += "\n";
-  }
+export const databaseConnectionsRelations = relations(
+  databaseConnections,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [databaseConnections.userId],
+      references: [users.id],
+    }),
+    queries: many(queries),
+  })
+);
 
-  return context;
-}
+export const queriesRelations = relations(queries, ({ one }) => ({
+  user: one(users, { fields: [queries.userId], references: [users.id] }),
+  connection: one(databaseConnections, {
+    fields: [queries.connectionId],
+    references: [databaseConnections.id],
+  }),
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+  user: one(users, { fields: [subscriptions.userId], references: [users.id] }),
+}));
+
+export const usageTrackingRelations = relations(usageTracking, ({ one }) => ({
+  user: one(users, { fields: [usageTracking.userId], references: [users.id] }),
+}));

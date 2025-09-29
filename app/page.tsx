@@ -1,568 +1,493 @@
-// app/page.tsx
+// app/page.tsx - Landing Page
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Clock, Star, History, X, Download, BarChart2 } from "lucide-react";
-import QueryHistory from "../components/QueryHistory";
-import SmartSuggestions from "../components/SmartSuggestions";
-import ExportMenu from "../components/ExportMenu";
-import NaturalLanguageFilterBar from "../components/NaturalLanguageFilterBar";
-import DataVisualization from "../components/DataVisualization"; //VisualizationToggle,
-import QueryHistoryManager from "../lib/queryHistory";
-import { SmartSuggestionsEngine } from "../lib/smartSuggestions";
-import { QueryHistoryItem } from "@/types/query";
+import { useState } from "react";
+import {
+  ArrowRight,
+  Database,
+  MessageCircle,
+  BarChart3,
+  Check,
+  Menu,
+  X,
+  Star,
+  Zap,
+  Shield,
+} from "lucide-react";
+import Link from "next/link";
 
-interface QueryResult {
-  success: boolean;
-  question?: string;
-  sql?: string;
-  rowCount?: number;
-  queryTime?: number;
-  results?: any[];
-  interpretation?: string;
-  truncated?: boolean;
-  error?: string;
-  fromCache?: boolean;
-  cacheKey?: string;
-  timestamp?: string;
-}
-
-interface CacheStats {
-  schema: { size: number; keys: string[] };
-  queries: { size: number; keys: string[] };
-}
-
-// A simple component to parse and render markdown-like bold text (**text**)
-// and preserve newlines.
-const SimpleMarkdown: React.FC<{ text: string; className?: string }> = ({
-  text,
-  className,
-}) => {
-  const parts = text.split(/(\*\*.*?\*\*|\n)/g);
+export default function LandingPage() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <p className={className}>
-      {parts.map((part, i) => {
-        // A simple function to remove markdown escape backslashes
-        const unescape = (str: string) => str.replace(/\\(.)/g, "$1");
-        if (part === "\n") return <br key={i} />;
-        if (part.startsWith("**") && part.endsWith("**")) {
-          return <strong key={i}>{unescape(part.slice(2, -2))}</strong>;
-        }
-        return unescape(part);
-      })}
-    </p>
-  );
-};
+    <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors">
+      {/* Navigation */}
+      <nav className="border-b border-gray-200 dark:border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            {/* Logo */}
+            <div className="flex items-center">
+              <div className="flex-shrink-0 flex items-center">
+                <div className="h-8 w-8 bg-emerald-600 rounded-lg flex items-center justify-center">
+                  <Database className="h-5 w-5 text-white" />
+                </div>
+                <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">
+                  Dbstuff.ai
+                </span>
+              </div>
+            </div>
 
-export default function Home() {
-  const [question, setQuestion] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<QueryResult | null>(null);
-  const [useCache, setUseCache] = useState(true);
-  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
+            {/* Desktop Navigation */}
+            <div className="hidden md:block">
+              <div className="ml-10 flex items-baseline space-x-4">
+                <a
+                  href="#features"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  Features
+                </a>
+                <a
+                  href="#pricing"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  Pricing
+                </a>
+                <Link
+                  href="/auth/signin"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  className="bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Start Free
+                </Link>
+              </div>
+            </div>
 
-  // History and suggestions state
-  const [history, setHistory] = useState<QueryHistoryItem[]>([]);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showFavorites, setShowFavorites] = useState(false);
+            {/* Mobile menu button */}
+            <div className="md:hidden">
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                {mobileMenuOpen ? (
+                  <X className="block h-6 w-6" />
+                ) : (
+                  <Menu className="block h-6 w-6" />
+                )}
+              </button>
+            </div>
+          </div>
 
-  // New states for export, filter, and visualization features
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const [currentQueryItem, setCurrentQueryItem] =
-    useState<QueryHistoryItem | null>(null);
-  const [filteredResults, setFilteredResults] = useState<any[] | null>(null);
-  const [showChart, setShowChart] = useState(false);
+          {/* Mobile menu */}
+          {mobileMenuOpen && (
+            <div className="md:hidden">
+              <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t border-gray-200 dark:border-gray-800">
+                <a
+                  href="#features"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white block px-3 py-2 text-base font-medium"
+                >
+                  Features
+                </a>
+                <a
+                  href="#pricing"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white block px-3 py-2 text-base font-medium"
+                >
+                  Pricing
+                </a>
+                <Link
+                  href="/auth/signin"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white block px-3 py-2 text-base font-medium"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  className="bg-emerald-600 text-white hover:bg-emerald-700 block px-3 py-2 rounded-lg text-base font-medium transition-colors"
+                >
+                  Start Free
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+      </nav>
 
-  const historyManager = useRef(QueryHistoryManager.getInstance());
-  const suggestionsEngine = useRef(SmartSuggestionsEngine.getInstance());
+      {/* Hero Section */}
+      <section className="pt-20 pb-16 sm:pt-24 sm:pb-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            {/* Badge */}
+            <div className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 mb-8">
+              <Zap className="h-4 w-4 mr-2" />
+              Built for startups & growing companies
+            </div>
 
-  // Fetch cache stats
-  const fetchCacheStats = async () => {
-    try {
-      const response = await fetch("/api/cache");
-      const data = await response.json();
-      setCacheStats(data);
-    } catch (error) {
-      console.error("Failed to fetch cache stats:", error);
-    }
-  };
-
-  useEffect(() => {
-    fetchCacheStats();
-    setHistory(historyManager.current.getHistory());
-  }, []);
-
-  const askQuestion = async (questionText?: string) => {
-    const queryText = questionText || question;
-    if (!queryText.trim()) return;
-
-    setLoading(true);
-    setResult(null);
-    setSuggestions([]);
-    setFilteredResults(null);
-    setShowChart(false);
-
-    try {
-      const response = await fetch("/api/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question: queryText,
-          useCache,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Create QueryHistoryItem for successful query
-        const queryItem: QueryHistoryItem = {
-          id: crypto.randomUUID(),
-          question: queryText,
-          sql: data.sql,
-          results: data.results,
-          interpretation: data.interpretation,
-          execution_time: data.queryTime,
-          timestamp: new Date(),
-          favorite: false,
-          fromCache: data.fromCache,
-        };
-
-        // Save to history
-        const savedQuery = historyManager.current.addQuery(queryItem);
-        setCurrentQueryItem(savedQuery);
-        setHistory(historyManager.current.getHistory());
-
-        // Generate suggestions
-        setSuggestionsLoading(true);
-        try {
-          const newSuggestions =
-            await suggestionsEngine.current.generateSuggestions(
-              queryText,
-              data.sql,
-              data.results
-            );
-          setSuggestions(newSuggestions);
-        } catch (error) {
-          console.error("Failed to generate suggestions:", error);
-        } finally {
-          setSuggestionsLoading(false);
-        }
-      } else if (data.error) {
-        // Still save failed queries to history
-        const failedQuery: QueryHistoryItem = {
-          id: crypto.randomUUID(),
-          question: queryText,
-          timestamp: new Date(),
-          favorite: false,
-          error: data.error,
-        };
-        historyManager.current.addQuery(failedQuery);
-        setHistory(historyManager.current.getHistory());
-      }
-
-      setResult(data);
-      fetchCacheStats();
-    } catch (error) {
-      console.error("Query failed:", error);
-      setResult({
-        success: false,
-        error: "Failed to connect to server",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSelectQuery = (query: QueryHistoryItem) => {
-    setQuestion(query.question);
-    if (query.results) {
-      setResult({
-        success: true,
-        question: query.question,
-        sql: query.sql,
-        results: query.results,
-        interpretation: query.interpretation,
-        queryTime: query.execution_time,
-        fromCache: query.fromCache,
-      });
-      setCurrentQueryItem(query);
-      setFilteredResults(null);
-      setShowChart(false);
-    } else {
-      askQuestion(query.question);
-    }
-  };
-
-  const handleToggleFavorite = (id: string) => {
-    historyManager.current.toggleFavorite(id);
-    setHistory([...historyManager.current.getHistory()]);
-  };
-
-  const clearCache = async () => {
-    try {
-      await fetch("/api/cache", { method: "DELETE" });
-      fetchCacheStats();
-    } catch (error) {
-      console.error("Failed to clear cache:", error);
-    }
-  };
-
-  const formatValue = (value: any) => {
-    if (value === null) return "null";
-    if (value === true) return "✓";
-    if (value === false) return "✗";
-    if (typeof value === "object") return JSON.stringify(value);
-    return String(value);
-  };
-
-  // Get the data to display (filtered or original)
-  const displayData = filteredResults || result?.results || [];
-
-  return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Header */}
-        <div className="mb-8 flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              🤖 Fintech AI Data Assistant
+            {/* Headline */}
+            <h1 className="text-4xl sm:text-6xl font-bold text-gray-900 dark:text-white mb-6">
+              Turn your database into{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600">
+                insights with AI
+              </span>
             </h1>
-            <p className="text-gray-600">
-              Ask questions about your data in plain English
+
+            <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto">
+              Smart database analytics that speaks your language. No SQL
+              required. Get answers to your business questions in seconds, not
+              hours.
+            </p>
+
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+              <Link
+                href="/auth/signup"
+                className="bg-emerald-600 text-white hover:bg-emerald-700 px-8 py-4 rounded-lg text-lg font-semibold transition-colors inline-flex items-center justify-center"
+              >
+                Start Free - No Credit Card Required
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+              <button className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-8 py-4 rounded-lg text-lg font-semibold transition-colors">
+                Watch Demo
+              </button>
+            </div>
+
+            {/* Social Proof */}
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Join 100+ startups getting faster insights from their data
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Demo Screenshot */}
+      <section className="pb-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-teal-500 rounded-2xl transform rotate-1"></div>
+            <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8">
+              <div className="bg-gray-100 dark:bg-gray-700 rounded-lg h-96 flex items-center justify-center">
+                <div className="text-center">
+                  <MessageCircle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    Demo Screenshot/Video Placeholder
+                  </p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
+                    "Show me our top customers this month" → Instant chart &
+                    insights
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="py-20 bg-gray-50 dark:bg-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              Everything you need to analyze your data
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+              Connect your database, ask questions in plain English, and get
+              instant visualizations and insights.
             </p>
           </div>
 
-          <div className="flex items-center space-x-4">
-            {/* History Controls */}
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => {
-                  setShowFavorites(!showFavorites);
-                  setShowHistory(false);
-                }}
-                className={`p-2 rounded-lg transition-colors ${
-                  showFavorites
-                    ? "bg-yellow-100 text-yellow-700"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-                title="Favorites"
-              >
-                <Star className="h-5 w-5" />
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowHistory(!showHistory);
-                  setShowFavorites(false);
-                }}
-                className={`p-2 rounded-lg transition-colors ${
-                  showHistory
-                    ? "bg-blue-100 text-blue-700"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-                title="Query History"
-              >
-                <History className="h-5 w-5" />
-              </button>
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Feature 1 */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-lg">
+              <div className="h-12 w-12 bg-emerald-100 dark:bg-emerald-900 rounded-lg flex items-center justify-center mb-6">
+                <MessageCircle className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                Natural Language Queries
+              </h3>
+              <p className="text-gray-600 dark:text-gray-300">
+                Ask questions like "Show me sales by region this month" and get
+                instant answers. No SQL knowledge required.
+              </p>
             </div>
 
-            {/* Cache Stats */}
-            <div className="bg-white rounded-lg shadow-sm p-4 text-sm">
-              <div className="flex items-center gap-4 mb-2">
-                <h3 className="font-semibold text-gray-700">Cache Status</h3>
-                <button
-                  onClick={clearCache}
-                  className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                >
-                  Clear All
-                </button>
+            {/* Feature 2 */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-lg">
+              <div className="h-12 w-12 bg-emerald-100 dark:bg-emerald-900 rounded-lg flex items-center justify-center mb-6">
+                <BarChart3 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               </div>
-              {cacheStats && (
-                <div className="space-y-1 text-gray-600">
-                  <div>
-                    Schema:{" "}
-                    {cacheStats.schema.size > 0 ? "✓ Cached" : "○ Empty"}
-                  </div>
-                  <div>Queries: {cacheStats.queries.size} cached</div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                Instant Visualizations
+              </h3>
+              <p className="text-gray-600 dark:text-gray-300">
+                AI automatically creates the perfect chart for your data. Bar
+                charts, line graphs, pie charts - all generated instantly.
+              </p>
+            </div>
+
+            {/* Feature 3 */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-lg">
+              <div className="h-12 w-12 bg-emerald-100 dark:bg-emerald-900 rounded-lg flex items-center justify-center mb-6">
+                <Shield className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                Secure & Fast
+              </h3>
+              <p className="text-gray-600 dark:text-gray-300">
+                Your database credentials are encrypted and secure. Get answers
+                in seconds with our optimized AI models.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section id="pricing" className="py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              Simple, startup-friendly pricing
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300">
+              Start free, upgrade when you need more. No hidden fees.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            {/* Free Plan */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 border border-gray-200 dark:border-gray-700">
+              <div className="text-center mb-8">
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  Free
+                </h3>
+                <div className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+                  $0
+                  <span className="text-lg font-normal text-gray-500">
+                    /month
+                  </span>
                 </div>
-              )}
+                <p className="text-gray-600 dark:text-gray-300">
+                  Perfect for trying out the platform
+                </p>
+              </div>
+
+              <ul className="space-y-4 mb-8">
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-emerald-600 mr-3" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    10 queries per day
+                  </span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-emerald-600 mr-3" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    1 database connection
+                  </span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-emerald-600 mr-3" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    7-day query history
+                  </span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-emerald-600 mr-3" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    Basic charts & exports
+                  </span>
+                </li>
+              </ul>
+
+              <Link
+                href="/auth/signup"
+                className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors text-center block"
+              >
+                Start Free
+              </Link>
+            </div>
+
+            {/* Starter Plan */}
+            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-2xl p-8 border-2 border-emerald-200 dark:border-emerald-700 relative">
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                <span className="bg-emerald-600 text-white px-4 py-1 rounded-full text-sm font-medium">
+                  Most Popular
+                </span>
+              </div>
+
+              <div className="text-center mb-8">
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  Starter
+                </h3>
+                <div className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+                  $29
+                  <span className="text-lg font-normal text-gray-500">
+                    /month
+                  </span>
+                </div>
+                <p className="text-gray-600 dark:text-gray-300">
+                  For growing teams and businesses
+                </p>
+              </div>
+
+              <ul className="space-y-4 mb-8">
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-emerald-600 mr-3" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    100 queries per day
+                  </span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-emerald-600 mr-3" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    3 database connections
+                  </span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-emerald-600 mr-3" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    30-day query history
+                  </span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-emerald-600 mr-3" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    Dashboard creation
+                  </span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-emerald-600 mr-3" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    Priority support
+                  </span>
+                </li>
+                <li className="flex items-center">
+                  <Star className="h-5 w-5 text-amber-500 mr-3" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    Advanced AI models
+                  </span>
+                </li>
+              </ul>
+
+              <Link
+                href="/auth/signup"
+                className="w-full bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-3 rounded-lg font-semibold transition-colors text-center block"
+              >
+                Start 14-Day Free Trial
+              </Link>
             </div>
           </div>
-        </div>
 
-        <div className="flex gap-6 min-w-0">
-          {/* Sidebar for History */}
-          {(showHistory || showFavorites) && (
-            <div className="w-80 flex-shrink-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900">
-                  {showFavorites ? "Favorites" : "Query History"}
-                </h2>
-                <button
-                  onClick={() => {
-                    setShowHistory(false);
-                    setShowFavorites(false);
-                  }}
-                  className="p-1 rounded hover:bg-gray-100"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <QueryHistory
-                history={history}
-                onSelectQuery={handleSelectQuery}
-                onToggleFavorite={handleToggleFavorite}
-                showFavoritesOnly={showFavorites}
-              />
-            </div>
-          )}
-
-          {/* Main Content */}
-          <div className="flex-1 min-w-0 overflow-hidden">
-            {/* Input Section */}
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <div className="flex gap-3 mb-3">
-                <input
-                  type="text"
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  onKeyPress={(e) =>
-                    e.key === "Enter" && !loading && askQuestion()
-                  }
-                  placeholder="e.g., Show me failed transactions from yesterday, or What's the average transaction amount by merchant?"
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={loading}
-                />
-                <button
-                  onClick={() => askQuestion()}
-                  disabled={loading}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                      <span>Analyzing...</span>
-                    </div>
-                  ) : (
-                    "Ask Question"
-                  )}
-                </button>
-              </div>
-
-              {/* Cache Toggle */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="useCache"
-                  checked={useCache}
-                  onChange={(e) => setUseCache(e.target.checked)}
-                  className="rounded"
-                />
-                <label htmlFor="useCache" className="text-sm text-gray-600">
-                  Use cache for faster responses
-                </label>
-              </div>
-            </div>
-
-            {/* Smart Suggestions */}
-            {suggestions.length > 0 && (
-              <SmartSuggestions
-                suggestions={suggestions}
-                onSelectSuggestion={(suggestion) => {
-                  setQuestion(suggestion);
-                  askQuestion(suggestion);
-                }}
-                loading={suggestionsLoading}
-              />
-            )}
-
-            {/* Results Section */}
-            {result && (
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                {result.success ? (
-                  <>
-                    {/* Result Header */}
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-xl font-semibold text-gray-900">
-                        Results
-                      </h2>
-                      <div className="flex items-center gap-3">
-                        {/* Export Menu */}
-                        {currentQueryItem && currentQueryItem.results && (
-                          <div className="relative">
-                            <button
-                              onClick={() => setShowExportMenu(!showExportMenu)}
-                              className="flex items-center space-x-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                            >
-                              <Download className="h-4 w-4" />
-                              <span>Export & Share</span>
-                            </button>
-                            {showExportMenu && (
-                              <ExportMenu
-                                query={currentQueryItem}
-                                onClose={() => setShowExportMenu(false)}
-                              />
-                            )}
-                          </div>
-                        )}
-
-                        {/* Visualization Toggle */}
-                        {result.results && result.results.length > 0 && (
-                          <button
-                            onClick={() => setShowChart(!showChart)}
-                            className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
-                              showChart
-                                ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                            }`}
-                          >
-                            <BarChart2 className="h-4 w-4" />
-                            <span>
-                              {showChart ? "Hide Chart" : "Show Chart"}
-                            </span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Interpretation */}
-                    {result.interpretation && (
-                      <div className="mb-4 p-4 bg-blue-50 rounded-lg">
-                        <SimpleMarkdown
-                          text={result.interpretation}
-                          className="text-blue-900 text-sm"
-                        />
-                      </div>
-                    )}
-
-                    {/* Metadata */}
-                    <div className="flex gap-4 text-sm text-gray-600 mb-4">
-                      <span>
-                        {result.rowCount} row{result.rowCount !== 1 ? "s" : ""}{" "}
-                        returned
-                      </span>
-                      {result.queryTime && (
-                        <span>Query took {result.queryTime}ms</span>
-                      )}
-                      {result.fromCache && (
-                        <span className="text-green-600">📦 From cache</span>
-                      )}
-                    </div>
-
-                    {/* SQL Query */}
-                    {result.sql && (
-                      <details className="mb-4">
-                        <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-900">
-                          View SQL Query
-                        </summary>
-                        <pre className="mt-2 p-3 bg-gray-100 rounded text-xs overflow-x-auto">
-                          {result.sql}
-                        </pre>
-                      </details>
-                    )}
-
-                    {/* Natural Language Filter */}
-                    {result.results && result.results.length > 0 && (
-                      <NaturalLanguageFilterBar
-                        originalResults={result.results}
-                        onFilter={(filtered, message) => {
-                          setFilteredResults(filtered);
-                        }}
-                        onClear={() => setFilteredResults(null)}
-                      />
-                    )}
-
-                    {/* Data Display - Chart or Table */}
-                    {showChart &&
-                    result.results &&
-                    result.results.length > 0 ? (
-                      <DataVisualization
-                        data={displayData}
-                        columns={Object.keys(result.results[0])}
-                      />
-                    ) : (
-                      /* Data Table */
-                      result.results &&
-                      result.results.length > 0 && (
-                        <div className="mt-4">
-                          {/* Table Container with controlled width */}
-                          <div className="w-full overflow-hidden border border-gray-200 rounded-lg">
-                            <div className="overflow-x-auto">
-                              <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                  <tr>
-                                    {Object.keys(result.results[0]).map(
-                                      (col) => (
-                                        <th
-                                          key={col}
-                                          className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                        >
-                                          {/* Truncate long column names */}
-                                          <div
-                                            className="truncate max-w-[200px]"
-                                            title={col}
-                                          >
-                                            {col}
-                                          </div>
-                                        </th>
-                                      )
-                                    )}
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                  {displayData.map((row, i) => (
-                                    <tr key={i} className="hover:bg-gray-50">
-                                      {Object.entries(row).map(
-                                        ([key, val], j) => (
-                                          <td
-                                            key={j}
-                                            className="px-3 py-2 text-sm text-gray-900"
-                                          >
-                                            {/* Smart value formatting with truncation */}
-                                            <div
-                                              className="max-w-[300px] truncate"
-                                              title={String(formatValue(val))}
-                                            >
-                                              {formatValue(val)}
-                                            </div>
-                                          </td>
-                                        )
-                                      )}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-
-                          {/* Optional: Show message if table is scrollable */}
-                          {result.results &&
-                            Object.keys(result.results[0]).length > 5 && (
-                              <p className="text-xs text-gray-500 mt-2 text-center">
-                                ← Scroll horizontally to see more columns →
-                              </p>
-                            )}
-                        </div>
-                      )
-                    )}
-                  </>
-                ) : (
-                  /* Error State */
-                  <div className="text-red-600">
-                    <h3 className="font-semibold mb-2">Error</h3>
-                    <p>{result.error}</p>
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="text-center mt-12">
+            <p className="text-gray-600 dark:text-gray-300">
+              Need more?{" "}
+              <span className="text-emerald-600 font-semibold">
+                Enterprise plans
+              </span>{" "}
+              available with unlimited usage.
+            </p>
           </div>
         </div>
-      </div>
-    </main>
+      </section>
+
+      {/* Final CTA */}
+      <section className="py-20 bg-emerald-600">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+            Ready to turn your data into insights?
+          </h2>
+          <p className="text-xl text-emerald-100 mb-8">
+            Join startups who are already getting faster insights from their
+            databases.
+          </p>
+          <Link
+            href="/auth/signup"
+            className="bg-white text-emerald-600 hover:bg-gray-100 px-8 py-4 rounded-lg text-lg font-semibold transition-colors inline-flex items-center"
+          >
+            Start Free Today
+            <ArrowRight className="ml-2 h-5 w-5" />
+          </Link>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-4 gap-8">
+            <div className="col-span-2">
+              <div className="flex items-center mb-4">
+                <div className="h-8 w-8 bg-emerald-600 rounded-lg flex items-center justify-center">
+                  <Database className="h-5 w-5 text-white" />
+                </div>
+                <span className="ml-2 text-xl font-bold">Dbstuff.ai</span>
+              </div>
+              <p className="text-gray-400 max-w-md">
+                Smart database analytics that speaks your language. Turn your
+                database into insights with AI - no SQL required.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-4">Product</h3>
+              <ul className="space-y-2 text-gray-400">
+                <li>
+                  <a
+                    href="#features"
+                    className="hover:text-white transition-colors"
+                  >
+                    Features
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="#pricing"
+                    className="hover:text-white transition-colors"
+                  >
+                    Pricing
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-white transition-colors">
+                    Documentation
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-4">Company</h3>
+              <ul className="space-y-2 text-gray-400">
+                <li>
+                  <a href="#" className="hover:text-white transition-colors">
+                    About
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-white transition-colors">
+                    Contact
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-white transition-colors">
+                    Privacy
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-white transition-colors">
+                    Terms
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-800 mt-12 pt-8 text-center text-gray-400">
+            <p>&copy; 2024 Dbstuff.ai. All rights reserved.</p>
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 }
