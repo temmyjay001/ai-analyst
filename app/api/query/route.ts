@@ -13,6 +13,7 @@ import { eq, and } from "drizzle-orm";
 import { decrypt } from "@/lib/encryption";
 import { Client } from "pg";
 import { generateSQL } from "@/lib/ai/gemini";
+import { schemaCache } from "@/lib/schemaCache";
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -108,10 +109,22 @@ export async function POST(req: NextRequest) {
       }/${connection[0].database}${sslParam}`;
     }
 
-    // Get database schema
-    const { getSchemaContext } = await import("@/lib/schemaIntrospection");
-    const schemaContext = await getSchemaContext(connectionString);
-    const schemaInfo = schemaContext.formatted;
+    // 🚀 SCHEMA CACHING: Check cache first
+    let schemaInfo: string;
+    const cachedSchema = schemaCache.get(connectionId);
+
+    if (cachedSchema) {
+      console.log(`✅ Using cached schema for connection: ${connectionId}`);
+      schemaInfo = cachedSchema.formatted;
+    } else {
+      console.log(`🔄 Fetching fresh schema for connection: ${connectionId}`);
+      const { getSchemaContext } = await import("@/lib/schemaIntrospection");
+      const schemaContext = await getSchemaContext(connectionString);
+      schemaInfo = schemaContext.formatted;
+
+      // Cache the schema
+      schemaCache.set(connectionId, schemaContext);
+    }
 
     // Generate SQL using AI (pass user plan for model selection)
     const { sql } = await generateSQL(question, schemaInfo, userPlan);
@@ -138,7 +151,8 @@ export async function POST(req: NextRequest) {
         question,
         sql,
         results,
-        results.length
+        results.length,
+        userPlan
       );
     } catch (err: any) {
       error = err.message;

@@ -13,6 +13,7 @@ import {
   User,
   CreditCard,
 } from "lucide-react";
+import UsageDisplay from "./UsageDisplay";
 
 export default function AppNav() {
   const { data: session } = useSession();
@@ -83,8 +84,11 @@ export default function AppNav() {
             })}
           </div>
 
-          {/* User Menu */}
+          {/* User Menu & Usage */}
           <div className="flex items-center space-x-4">
+            {/* Usage Display */}
+            <UsageDisplay />
+
             <div className="hidden md:flex items-center space-x-3">
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900 dark:text-white">

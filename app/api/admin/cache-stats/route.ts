@@ -9,7 +9,7 @@ import { schemaCache } from "@/lib/schemaCache";
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -29,8 +29,9 @@ export async function DELETE(
       return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
-    const { id } = await params;
+    const { id } = params;
 
+    // Delete connection (only if it belongs to the user)
     const deleted = await db
       .delete(databaseConnections)
       .where(
@@ -48,6 +49,7 @@ export async function DELETE(
       );
     }
 
+    // 🚀 INVALIDATE SCHEMA CACHE for this connection
     schemaCache.invalidate(id);
     console.log(`Cache invalidated for deleted connection: ${id}`);
 
@@ -64,7 +66,7 @@ export async function DELETE(
 // PATCH endpoint for updating connection (optional but recommended)
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -83,7 +85,7 @@ export async function PATCH(
       return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
-    const { id } = await params;
+    const { id } = params;
     const updateData = await req.json();
 
     // Update connection

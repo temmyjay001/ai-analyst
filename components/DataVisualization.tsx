@@ -1,4 +1,4 @@
-// components/DataVisualization.tsx
+// components/DataVisualization.tsx - FIXED: Auto-detect columns
 "use client";
 
 import React, { useMemo } from "react";
@@ -19,8 +19,15 @@ import {
 } from "recharts";
 
 // Visualization type detection
-const detectVisualizationType = (data: any[], columns: string[]) => {
-  if (!data || data.length === 0 || !columns || columns.length === 0) {
+const detectVisualizationType = (data: any[]) => {
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  // Get columns from first row
+  const columns = Object.keys(data[0]);
+
+  if (columns.length === 0) {
     return null;
   }
 
@@ -127,17 +134,10 @@ const COLORS = [
 
 interface DataVisualizationProps {
   data: any[];
-  columns: string[];
 }
 
-export default function DataVisualization({
-  data,
-  columns,
-}: DataVisualizationProps) {
-  const vizConfig = useMemo(
-    () => detectVisualizationType(data, columns),
-    [data, columns]
-  );
+export default function DataVisualization({ data }: DataVisualizationProps) {
+  const vizConfig = useMemo(() => detectVisualizationType(data), [data]);
 
   const chartData = useMemo(
     () => formatChartData(data, vizConfig),

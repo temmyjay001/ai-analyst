@@ -60,7 +60,7 @@ export const verificationTokens = pgTable("verification_tokens", {
   expires: timestamp("expires").notNull(),
 });
 
-// Database connections
+// Database connections - FIXED: Made fields nullable to match migration
 export const databaseConnections = pgTable("database_connections", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")
@@ -68,12 +68,12 @@ export const databaseConnections = pgTable("database_connections", {
     .references(() => users.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   type: varchar("type", { length: 50 }).notNull(), // postgresql, mysql
-  host: varchar("host", { length: 255 }),
-  port: integer("port"),
-  database: varchar("database", { length: 255 }),
-  username: varchar("username", { length: 255 }),
-  passwordEncrypted: text("password_encrypted"), // Encrypted password or full connection URL
-  connectionUrlEncrypted: text("connection_url_encrypted"), // Store full connection URL if provided
+  host: varchar("host", { length: 255 }), // NULLABLE - can use URL instead
+  port: integer("port"), // NULLABLE - can use URL instead
+  database: varchar("database", { length: 255 }), // NULLABLE - can use URL instead
+  username: varchar("username", { length: 255 }), // NULLABLE - can use URL instead
+  passwordEncrypted: text("password_encrypted"), // NULLABLE - can use URL instead
+  connectionUrlEncrypted: text("connection_url_encrypted"), // Store full URL if provided
   ssl: boolean("ssl").default(false),
   isActive: boolean("is_active").default(true),
   lastTestedAt: timestamp("last_tested_at"),
