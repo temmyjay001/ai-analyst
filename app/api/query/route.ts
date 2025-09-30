@@ -1,40 +1,59 @@
-// app/api/query/route.ts
-import { NextRequest, NextResponse } from "next/server";
+// app/api/query/route.ts - FIXED decryption + caching
+import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import {
-  databaseConnections,
   users,
-  queries,
+  databaseConnections,
   usageTracking,
+  queries,
 } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
-import { decrypt } from "@/lib/encryption";
 import { Client } from "pg";
-import { generateSQL } from "@/lib/ai/gemini";
-import { schemaCache } from "@/lib/schemaCache";
+import { decrypt } from "@/lib/encryption";
+import { authOptions } from "../auth/[...nextauth]/route";
 
-export async function POST(req: NextRequest) {
-  const startTime = Date.now();
+// Schema cache (in-memory)
+const schemaCache = new Map<string, { formatted: string; timestamp: number }>();
+const SCHEMA_CACHE_TTL = 3600000; // 1 hour
 
+export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-
     if (!session?.user?.email) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
-    // Get user from database
+    const { question, connectionId } = await request.json();
+
+    if (!question || !connectionId) {
+      return NextResponse.json(
+        { success: false, error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    const startTime = Date.now();
+
+    // Get user
     const user = await db
       .select()
       .from(users)
       .where(eq(users.email, session.user.email))
       .limit(1);
 
-    if (!user[0]) {
-      return NextResponse.json({ message: "User not found" }, { status: 404 });
+    if (!user || user.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "User not found" },
+        { status: 404 }
+      );
     }
+
+    const userId = user[0].id;
+    const userPlan = user[0].plan || "free";
 
     // Check usage limits
     const today = new Date().toISOString().split("T")[0];
@@ -42,66 +61,71 @@ export async function POST(req: NextRequest) {
       .select()
       .from(usageTracking)
       .where(
-        and(eq(usageTracking.userId, user[0].id), eq(usageTracking.date, today))
+        and(eq(usageTracking.userId, userId), eq(usageTracking.date, today))
       )
       .limit(1);
 
-    const queryCount = usage[0]?.queryCount || 0;
-    const userPlan = user[0].plan || "free";
+    const currentQueryCount = usage[0]?.queryCount || 0;
 
-    // Define limits per plan
-    const limits: Record<string, number> = {
-      free: 10,
-      starter: 100,
-      growth: 500,
-      enterprise: 999999,
+    // UPDATED LIMITS - More restrictive free tier
+    const QUERY_LIMITS: Record<string, number> = {
+      free: 3, // Reduced from 10 to 3
+      starter: 50,
+      growth: 300,
+      enterprise: 1500,
     };
 
-    if (queryCount >= limits[userPlan]) {
+    const limit = QUERY_LIMITS[userPlan] || QUERY_LIMITS.free;
+
+    if (currentQueryCount >= limit) {
       return NextResponse.json(
         {
-          message: `Daily query limit reached (${limits[userPlan]} queries). Please upgrade your plan.`,
-          error: "LIMIT_EXCEEDED",
+          success: false,
+          error: `Daily query limit reached (${limit} queries/day). Please upgrade your plan.`,
+          limit,
+          used: currentQueryCount,
         },
         { status: 429 }
       );
     }
 
-    const { connectionId, question } = await req.json();
-
-    if (!connectionId || !question) {
-      return NextResponse.json(
-        { message: "Connection ID and question are required" },
-        { status: 400 }
-      );
-    }
-
-    // Get connection details
+    // Get database connection
     const connection = await db
       .select()
       .from(databaseConnections)
       .where(
         and(
           eq(databaseConnections.id, connectionId),
-          eq(databaseConnections.userId, user[0].id)
+          eq(databaseConnections.userId, userId)
         )
       )
       .limit(1);
 
-    if (!connection[0]) {
+    if (!connection || connection.length === 0) {
       return NextResponse.json(
-        { message: "Connection not found" },
+        { success: false, error: "Database connection not found" },
         { status: 404 }
       );
     }
 
-    // Get connection string
+    // FIXED: Proper decryption logic
     let connectionString: string;
+
     if (connection[0].connectionUrlEncrypted) {
+      // If connection URL was stored, decrypt it
       connectionString = decrypt(connection[0].connectionUrlEncrypted);
     } else {
-      const password = decrypt(connection[0].passwordEncrypted!);
+      // Otherwise, build connection string from individual fields
+      if (!connection[0].passwordEncrypted) {
+        return NextResponse.json(
+          { success: false, error: "Invalid connection configuration" },
+          { status: 400 }
+        );
+      }
+
+      const password = decrypt(connection[0].passwordEncrypted);
       const sslParam = connection[0].ssl ? "?sslmode=require" : "";
+
       connectionString = `postgresql://${
         connection[0].username
       }:${encodeURIComponent(password)}@${connection[0].host}:${
@@ -109,11 +133,14 @@ export async function POST(req: NextRequest) {
       }/${connection[0].database}${sslParam}`;
     }
 
-    // 🚀 SCHEMA CACHING: Check cache first
+    // Schema caching
     let schemaInfo: string;
     const cachedSchema = schemaCache.get(connectionId);
 
-    if (cachedSchema) {
+    if (
+      cachedSchema &&
+      Date.now() - cachedSchema.timestamp < SCHEMA_CACHE_TTL
+    ) {
       console.log(`✅ Using cached schema for connection: ${connectionId}`);
       schemaInfo = cachedSchema.formatted;
     } else {
@@ -122,12 +149,20 @@ export async function POST(req: NextRequest) {
       const schemaContext = await getSchemaContext(connectionString);
       schemaInfo = schemaContext.formatted;
 
-      // Cache the schema
-      schemaCache.set(connectionId, schemaContext);
+      schemaCache.set(connectionId, {
+        formatted: schemaInfo,
+        timestamp: Date.now(),
+      });
     }
 
-    // Generate SQL using AI (pass user plan for model selection)
-    const { sql } = await generateSQL(question, schemaInfo, userPlan);
+    // Generate SQL using AI with context caching (75% cost reduction!)
+    const { generateSQL } = await import("@/lib/ai/gemini");
+    const { sql } = await generateSQL(
+      question,
+      schemaInfo,
+      userPlan,
+      connectionId
+    );
 
     // Execute SQL
     const client = new Client({
@@ -145,7 +180,7 @@ export async function POST(req: NextRequest) {
       results = queryResult.rows;
       await client.end();
 
-      // Generate interpretation AFTER getting results
+      // Generate interpretation with smart context
       const { interpretResults } = await import("@/lib/ai/gemini");
       interpretation = await interpretResults(
         question,

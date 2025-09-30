@@ -1,4 +1,4 @@
-// components/DataVisualization.tsx
+// components/DataVisualization.tsx - FIXED VERSION v2
 "use client";
 
 import React, { useMemo } from "react";
@@ -29,7 +29,6 @@ const detectVisualizationType = (data: any[]) => {
     return null;
   }
 
-  // FIXED: Stricter date detection - check column name first, then validate value
   const dateColumns = columns.filter((col) => {
     const colLower = col.toLowerCase();
 
@@ -90,6 +89,15 @@ const detectVisualizationType = (data: any[]) => {
     const isNotDate = !dateColumns.includes(col);
 
     return isString && isNotNumeric && isNotDate;
+  });
+
+  console.log("📊 Detection Results:", {
+    columns,
+    dateColumns,
+    numericColumns,
+    categoricalColumns,
+    dataLength: data.length,
+    sampleRow: data[0],
   });
 
   // Time series detection - PRIORITIZE THIS
@@ -170,52 +178,53 @@ const formatChartData = (data: any[], vizConfig: any) => {
   try {
     switch (vizConfig.type) {
       case "line":
-        return data.map((row, index) => {
-          const xValue = row[vizConfig.x];
-          let formattedX = String(xValue);
+      case "bar":
+        return data.map((row) => {
+          let xValue = row[vizConfig.x];
 
-          // Format dates nicely
-          if (
-            xValue &&
-            typeof xValue === "string" &&
-            !isNaN(Date.parse(xValue))
-          ) {
+          // Check if this is a date column
+          const isDateColumn =
+            vizConfig.x &&
+            (vizConfig.x.toLowerCase().includes("date") ||
+              vizConfig.x.toLowerCase().includes("time") ||
+              vizConfig.x.toLowerCase().includes("month") ||
+              vizConfig.x.toLowerCase().includes("created") ||
+              vizConfig.x.toLowerCase().includes("updated"));
+
+          // Format dates properly using UTC to avoid timezone issues
+          if (isDateColumn && xValue) {
             const date = new Date(xValue);
-            formattedX = date.toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "short",
-            });
+            if (!isNaN(date.getTime())) {
+              const monthNames = [
+                "Jan",
+                "Feb",
+                "Mar",
+                "Apr",
+                "May",
+                "Jun",
+                "Jul",
+                "Aug",
+                "Sep",
+                "Oct",
+                "Nov",
+                "Dec",
+              ];
+              xValue = `${
+                monthNames[date.getUTCMonth()]
+              } ${date.getUTCFullYear()}`;
+            }
           }
 
-          const yValue = parseFloat(row[vizConfig.y]);
-
           return {
             ...row,
-            [vizConfig.x]: formattedX,
-            [vizConfig.y]: yValue || 0,
-            originalIndex: index,
-          };
-        });
-
-      case "bar":
-        return data.map((row, index) => {
-          const xValue = vizConfig.useIndex
-            ? `Row ${index + 1}`
-            : String(row[vizConfig.x] || "").slice(0, 20);
-
-          const yValue = parseFloat(row[vizConfig.y]);
-
-          return {
-            ...row,
-            [vizConfig.x]: xValue,
-            [vizConfig.y]: yValue || 0,
-            originalIndex: index,
+            [vizConfig.x]: String(xValue || "").slice(0, 20),
+            [vizConfig.y]: parseFloat(row[vizConfig.y]) || 0,
           };
         });
 
       case "pie":
         return data.map((row) => ({
-          name: String(row[vizConfig.label] || "Unknown").slice(0, 20),
+          name: String(row[vizConfig.label] || "Unknown"),
           value: parseFloat(row[vizConfig.value]) || 0,
         }));
 
@@ -247,15 +256,18 @@ interface DataVisualizationProps {
 export default function DataVisualization({ data }: DataVisualizationProps) {
   const vizConfig = useMemo(() => {
     const config = detectVisualizationType(data);
+    console.log("✅ Visualization config:", config);
     return config;
   }, [data]);
 
   const chartData = useMemo(() => {
     const formatted = formatChartData(data, vizConfig);
+    console.log("✅ Formatted chart data:", formatted);
     return formatted;
   }, [data, vizConfig]);
 
   if (!vizConfig || !chartData || chartData.length === 0) {
+    console.log("❌ No visualization config or data");
     return (
       <div className="p-8 bg-gray-50 dark:bg-gray-900 rounded-lg text-center text-gray-500 dark:text-gray-400">
         <svg
@@ -278,6 +290,8 @@ export default function DataVisualization({ data }: DataVisualizationProps) {
       </div>
     );
   }
+
+  console.log("✅ Rendering chart with data:", chartData.length, "rows");
 
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
