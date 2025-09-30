@@ -1,9 +1,7 @@
-// app/settings/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import {
   User,
   Mail,
@@ -13,7 +11,6 @@ import {
   AlertCircle,
   Trash2,
 } from "lucide-react";
-import AppNav from "@/components/AppNav";
 
 interface UserProfile {
   name: string;
@@ -23,8 +20,7 @@ interface UserProfile {
 }
 
 export default function SettingsPage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
+  const { data: session } = useSession();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -36,19 +32,10 @@ export default function SettingsPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin");
-    }
-  }, [status, router]);
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchProfile();
-    }
-  }, [status]);
+    fetchProfile();
+  }, []);
 
   const fetchProfile = async () => {
     try {
@@ -155,7 +142,6 @@ export default function SettingsPage() {
       });
 
       if (response.ok) {
-        // Sign out and redirect
         window.location.href = "/";
       } else {
         const data = await response.json();
@@ -169,21 +155,16 @@ export default function SettingsPage() {
     }
   };
 
-  if (status === "loading" || loading) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <AppNav />
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
-        </div>
+      <div className="flex-1 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <AppNav />
-
+    <div className="flex-1 overflow-auto">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-8">
           Account Settings

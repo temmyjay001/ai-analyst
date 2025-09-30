@@ -175,7 +175,7 @@ export default function LandingPage() {
                     Demo Screenshot/Video Placeholder
                   </p>
                   <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-                    "Show me our top customers this month" → Instant chart &
+                    &quot;Show me our top customers this month&quot; → Instant chart &
                     insights
                   </p>
                 </div>
@@ -208,7 +208,7 @@ export default function LandingPage() {
                 Natural Language Queries
               </h3>
               <p className="text-gray-600 dark:text-gray-300">
-                Ask questions like "Show me sales by region this month" and get
+                Ask questions like &quot;Show me sales by region this month&quot; and get
                 instant answers. No SQL knowledge required.
               </p>
             </div>

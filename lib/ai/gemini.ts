@@ -5,10 +5,10 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 // Model selection based on user plan
 const MODEL_TIERS: Record<string, string> = {
-  free: "gemini-1.5-flash",
-  starter: "gemini-1.5-flash",
-  growth: "gemini-2.0-flash-exp",
-  enterprise: "gemini-1.5-pro",
+  free: "gemini-2.0-flash",
+  starter: "gemini-2.5-flash-lite",
+  growth: "gemini-2.5-flash",
+  enterprise: "gemini-2.5-pro",
 };
 
 function getModelForPlan(plan: string): string {
