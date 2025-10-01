@@ -1,33 +1,47 @@
-// app/api/query/route.ts - FIXED decryption + caching
-import { NextResponse } from "next/server";
+// app/api/query/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { authOptions } from "../auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import {
   users,
   databaseConnections,
-  usageTracking,
   queries,
+  usageTracking,
 } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
-import { Client } from "pg";
-import { decrypt } from "@/lib/encryption";
-import { authOptions } from "../auth/[...nextauth]/route";
+import { executeQuery, DatabaseType } from "@/lib/database/factory";
+import { getSchemaContext } from "@/lib/database/schemaIntrospection";
 
-// Schema cache (in-memory)
-const schemaCache = new Map<string, { formatted: string; timestamp: number }>();
-const SCHEMA_CACHE_TTL = 3600000; // 1 hour
+// Schema cache
+const schemaCache = new Map<
+  string,
+  { formatted: string; timestamp: number; dbType: DatabaseType }
+>();
+const SCHEMA_CACHE_TTL = 1000 * 60 * 60; // 1 hour
 
-export async function POST(request: Request) {
+// Query limits per plan
+const PLAN_LIMITS = {
+  free: 3,
+  starter: 50,
+  growth: 300,
+  enterprise: Infinity,
+};
+
+export async function POST(req: NextRequest) {
+  const startTime = Date.now();
+
   try {
     const session = await getServerSession(authOptions);
+
     if (!session?.user?.email) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
+        { success: false, message: "Unauthorized" },
         { status: 401 }
       );
     }
 
-    const { question, connectionId } = await request.json();
+    const { question, connectionId } = await req.json();
 
     if (!question || !connectionId) {
       return NextResponse.json(
@@ -36,9 +50,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const startTime = Date.now();
-
-    // Get user
+    // Get user info
     const user = await db
       .select()
       .from(users)
@@ -66,22 +78,14 @@ export async function POST(request: Request) {
       .limit(1);
 
     const currentQueryCount = usage[0]?.queryCount || 0;
-
-    // UPDATED LIMITS - More restrictive free tier
-    const QUERY_LIMITS: Record<string, number> = {
-      free: 3, // Reduced from 10 to 3
-      starter: 50,
-      growth: 300,
-      enterprise: 1500,
-    };
-
-    const limit = QUERY_LIMITS[userPlan] || QUERY_LIMITS.free;
+    const limit =
+      PLAN_LIMITS[userPlan as keyof typeof PLAN_LIMITS] || PLAN_LIMITS.free;
 
     if (currentQueryCount >= limit) {
       return NextResponse.json(
         {
           success: false,
-          error: `Daily query limit reached (${limit} queries/day). Please upgrade your plan.`,
+          error: `Daily query limit reached (${limit} queries). Please upgrade your plan.`,
           limit,
           used: currentQueryCount,
         },
@@ -108,80 +112,108 @@ export async function POST(request: Request) {
       );
     }
 
-    // FIXED: Proper decryption logic
-    let connectionString: string;
+    const dbConfig = connection[0];
+    const dbType = dbConfig.type as DatabaseType;
 
-    if (connection[0].connectionUrlEncrypted) {
-      // If connection URL was stored, decrypt it
-      connectionString = decrypt(connection[0].connectionUrlEncrypted);
-    } else {
-      // Otherwise, build connection string from individual fields
-      if (!connection[0].passwordEncrypted) {
-        return NextResponse.json(
-          { success: false, error: "Invalid connection configuration" },
-          { status: 400 }
-        );
-      }
-
-      const password = decrypt(connection[0].passwordEncrypted);
-      const sslParam = connection[0].ssl ? "?sslmode=require" : "";
-
-      connectionString = `postgresql://${
-        connection[0].username
-      }:${encodeURIComponent(password)}@${connection[0].host}:${
-        connection[0].port
-      }/${connection[0].database}${sslParam}`;
-    }
-
-    // Schema caching
+    // Schema caching with database type awareness
     let schemaInfo: string;
     const cachedSchema = schemaCache.get(connectionId);
 
     if (
       cachedSchema &&
-      Date.now() - cachedSchema.timestamp < SCHEMA_CACHE_TTL
+      Date.now() - cachedSchema.timestamp < SCHEMA_CACHE_TTL &&
+      cachedSchema.dbType === dbType
     ) {
-      console.log(`✅ Using cached schema for connection: ${connectionId}`);
+      console.log(
+        `✅ Using cached schema for connection: ${connectionId} (${dbType})`
+      );
       schemaInfo = cachedSchema.formatted;
     } else {
-      console.log(`🔄 Fetching fresh schema for connection: ${connectionId}`);
-      const { getSchemaContext } = await import("@/lib/schemaIntrospection");
-      const schemaContext = await getSchemaContext(connectionString);
-      schemaInfo = schemaContext.formatted;
+      console.log(
+        `🔄 Fetching fresh schema for connection: ${connectionId} (${dbType})`
+      );
 
-      schemaCache.set(connectionId, {
-        formatted: schemaInfo,
-        timestamp: Date.now(),
-      });
+      try {
+        const schemaContext = await getSchemaContext({
+          id: dbConfig.id,
+          type: dbType,
+          host: dbConfig.host,
+          port: dbConfig.port,
+          database: dbConfig.database,
+          username: dbConfig.username,
+          passwordEncrypted: dbConfig.passwordEncrypted,
+          connectionUrlEncrypted: dbConfig.connectionUrlEncrypted,
+          ssl: dbConfig.ssl,
+        });
+
+        schemaInfo = schemaContext.formatted;
+
+        schemaCache.set(connectionId, {
+          formatted: schemaInfo,
+          timestamp: Date.now(),
+          dbType: dbType,
+        });
+      } catch (schemaError: any) {
+        console.error("Schema introspection error:", schemaError);
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Failed to read database schema: ${schemaError.message}`,
+          },
+          { status: 500 }
+        );
+      }
     }
 
     // Generate SQL using AI with context caching (75% cost reduction!)
-    const { generateSQL } = await import("@/lib/ai/gemini");
-    const { sql } = await generateSQL(
-      question,
-      schemaInfo,
-      userPlan,
-      connectionId
-    );
+    const { generateSQL } = await import("@/lib/ai/gemini-multidb");
 
-    // Execute SQL
-    const client = new Client({
-      connectionString,
-      connectionTimeoutMillis: 10000,
-    });
+    let sql: string;
+    try {
+      const result = await generateSQL(
+        question,
+        schemaInfo,
+        userPlan,
+        dbType,
+        connectionId
+      );
+      sql = result.sql;
+    } catch (aiError: any) {
+      console.error("AI SQL generation error:", aiError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Failed to generate SQL: ${aiError.message}`,
+        },
+        { status: 500 }
+      );
+    }
 
+    // Execute SQL using the database factory
     let results: any[] = [];
     let error: string | undefined;
     let interpretation: string = "";
 
     try {
-      await client.connect();
-      const queryResult = await client.query(sql);
+      const queryResult = await executeQuery(
+        {
+          id: dbConfig.id,
+          type: dbType,
+          host: dbConfig.host,
+          port: dbConfig.port,
+          database: dbConfig.database,
+          username: dbConfig.username,
+          passwordEncrypted: dbConfig.passwordEncrypted,
+          connectionUrlEncrypted: dbConfig.connectionUrlEncrypted,
+          ssl: dbConfig.ssl,
+        },
+        sql
+      );
+
       results = queryResult.rows;
-      await client.end();
 
       // Generate interpretation with smart context
-      const { interpretResults } = await import("@/lib/ai/gemini");
+      const { interpretResults } = await import("@/lib/ai/gemini-multidb");
       interpretation = await interpretResults(
         question,
         sql,
@@ -192,7 +224,24 @@ export async function POST(request: Request) {
     } catch (err: any) {
       error = err.message;
       interpretation = `Error executing query: ${err.message}`;
-      await client.end().catch(() => {});
+
+      // Provide helpful error context based on database type
+      let errorContext = "";
+      switch (dbType) {
+        case "mysql":
+          errorContext = " (Check MySQL-specific syntax)";
+          break;
+        case "mssql":
+          errorContext = " (Check SQL Server-specific syntax)";
+          break;
+        case "sqlite":
+          errorContext = " (Check SQLite-specific syntax)";
+          break;
+        case "postgresql":
+          errorContext = " (Check PostgreSQL-specific syntax)";
+          break;
+      }
+      error = error + errorContext;
     }
 
     const executionTime = Date.now() - startTime;
@@ -230,7 +279,8 @@ export async function POST(request: Request) {
           success: false,
           error,
           sql,
-          interpretation: "There was an error executing your query.",
+          interpretation,
+          dbType,
         },
         { status: 400 }
       );
@@ -243,6 +293,7 @@ export async function POST(request: Request) {
       rowCount: results.length,
       executionTime,
       interpretation,
+      dbType,
     });
   } catch (error: any) {
     console.error("Query error:", error);

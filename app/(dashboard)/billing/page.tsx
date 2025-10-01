@@ -157,7 +157,7 @@ export default function BillingPage() {
               }`}
             >
               Annual
-              <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+              <span className="absolute -top-3 -right-10 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
                 Save {discount}%
               </span>
             </button>
@@ -177,7 +177,7 @@ export default function BillingPage() {
               <ul className="space-y-3 mb-6">
                 <li className="flex items-center text-sm">
                   <Check className="h-4 w-4 text-emerald-600 mr-2" />
-                  10 queries/day
+                  3 queries/day
                 </li>
                 <li className="flex items-center text-sm">
                   <Check className="h-4 w-4 text-emerald-600 mr-2" />1

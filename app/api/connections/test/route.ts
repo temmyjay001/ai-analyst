@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
-import { Client } from "pg";
+import { createDatabaseConnection, DatabaseType } from "@/lib/database/factory";
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,50 +24,87 @@ export async function POST(req: NextRequest) {
       connectionUrl,
     } = body;
 
-    if (type !== "postgresql") {
+    // Validate database type
+    const validTypes: DatabaseType[] = [
+      "postgresql",
+      "mysql",
+      "mssql",
+      "sqlite",
+    ];
+    if (!validTypes.includes(type)) {
       return NextResponse.json(
-        { message: "Only PostgreSQL is supported in this version" },
+        {
+          message: `Unsupported database type: ${type}. Supported: ${validTypes.join(
+            ", "
+          )}`,
+        },
         { status: 400 }
       );
     }
 
-    let finalConnectionString: string;
-
-    // Use connection URL if provided, otherwise build from parts
-    if (connectionUrl) {
-      finalConnectionString = connectionUrl;
-    } else {
-      // Build connection string from individual parts
-      const sslParam = ssl ? "?sslmode=require" : "";
-      finalConnectionString = `postgresql://${username}:${encodeURIComponent(
-        password
-      )}@${host}:${port}/${database}${sslParam}`;
-    }
-
-    const client = new Client({
-      connectionString: finalConnectionString,
-      connectionTimeoutMillis: 5000,
-    });
+    // Create temporary config for testing
+    const testConfig = {
+      id: "test-connection",
+      type: type as DatabaseType,
+      host,
+      port,
+      database,
+      username,
+      passwordEncrypted: password ? password : null, // Not encrypted for test
+      connectionUrlEncrypted: connectionUrl ? connectionUrl : null,
+      ssl,
+    };
 
     try {
-      await client.connect();
+      // Use factory to create connection
+      const connection = createDatabaseConnection(testConfig);
 
-      // Test with a simple query
-      await client.query("SELECT 1");
+      // Test the connection
+      const isConnected = await connection.testConnection();
 
-      await client.end();
-
-      return NextResponse.json({
-        success: true,
-        message: "Connection successful!",
-      });
+      if (isConnected) {
+        return NextResponse.json({
+          success: true,
+          message: `${type.toUpperCase()} connection successful!`,
+        });
+      } else {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Failed to connect to ${type.toUpperCase()} database`,
+          },
+          { status: 400 }
+        );
+      }
     } catch (error: any) {
-      await client.end().catch(() => {});
+      console.error(`${type} connection error:`, error);
+
+      // Provide helpful error messages based on database type
+      let helpMessage = "";
+      switch (type) {
+        case "mysql":
+          helpMessage =
+            "Common issues: Check host/port (usually 3306), verify user permissions, ensure MySQL is running.";
+          break;
+        case "mssql":
+          helpMessage =
+            "Common issues: Check host/port (usually 1433), verify SQL Server authentication mode, check firewall settings.";
+          break;
+        case "sqlite":
+          helpMessage =
+            "Common issues: Verify file path exists and is accessible, check file permissions.";
+          break;
+        case "postgresql":
+          helpMessage =
+            "Common issues: Check host/port (usually 5432), verify SSL settings, ensure PostgreSQL is running.";
+          break;
+      }
 
       return NextResponse.json(
         {
           success: false,
           message: `Connection failed: ${error.message}`,
+          help: helpMessage,
         },
         { status: 400 }
       );
@@ -78,6 +115,7 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         message: "Failed to test connection",
+        error: error.message,
       },
       { status: 500 }
     );
