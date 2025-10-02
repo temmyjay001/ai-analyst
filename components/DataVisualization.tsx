@@ -18,7 +18,167 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-// IMPROVED: Better detection with comprehensive logging
+const CustomTooltip = ({ active, payload, label, valueFormatter }: any) => {
+  if (!active || !payload || !payload.length) return null;
+
+  return (
+    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600">
+      <p className="font-semibold text-gray-900 dark:text-white mb-2">
+        {label}
+      </p>
+      {payload.map((entry: any, index: number) => (
+        <div key={index} className="flex items-center gap-2">
+          <div
+            className="w-3 h-3 rounded-full"
+            style={{ backgroundColor: entry.color }}
+          />
+          <span className="text-sm text-gray-600 dark:text-gray-300 capitalize">
+            {String(entry.name).split("_").join(" ")}:
+          </span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">
+            {valueFormatter ? valueFormatter(entry.value) : entry.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const formatLegendLabel = (label: string) => {
+  return label
+    .replace(/_/g, " ")
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
+// Custom Legend Component with better styling
+const CustomLegend = ({ payload, chartData, valueFormatter }: any) => {
+  if (!payload || payload.length === 0) return null;
+
+  // Calculate totals/stats for the legend
+  const calculateStats = (dataKey: string) => {
+    if (!chartData) return null;
+
+    const values = chartData
+      .map((item: any) => item[dataKey])
+      .filter((val: any) => val !== null && val !== undefined);
+
+    if (values.length === 0) return null;
+
+    const sum = values.reduce((acc: number, val: number) => acc + val, 0);
+    const avg = sum / values.length;
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+
+    return { sum, avg, max, min, count: values.length };
+  };
+
+  return (
+    <div className="flex flex-wrap justify-center gap-6 pt-4 px-4">
+      {payload.map((entry: any, index: number) => {
+        const stats = calculateStats(entry.dataKey);
+        const label = formatLegendLabel(entry.dataKey);
+
+        return (
+          <div
+            key={`legend-${index}`}
+            className="flex flex-col items-start gap-1 bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-lg"
+          >
+            {/* Legend label with color indicator */}
+            <div className="flex items-center gap-2">
+              <div
+                className="w-4 h-4 rounded"
+                style={{ backgroundColor: entry.color }}
+              />
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                {label}
+              </span>
+            </div>
+
+            {/* Stats if available */}
+            {stats && (
+              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-0.5 ml-6">
+                <div>
+                  Total:{" "}
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {valueFormatter
+                      ? valueFormatter(stats.sum)
+                      : formatNumber(stats.sum)}
+                  </span>
+                </div>
+                <div>
+                  Avg:{" "}
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {valueFormatter
+                      ? valueFormatter(stats.avg)
+                      : formatNumber(stats.avg)}
+                  </span>
+                </div>
+                <div className="flex gap-3">
+                  <span>
+                    Min:{" "}
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {valueFormatter
+                        ? valueFormatter(stats.min)
+                        : formatNumber(stats.min)}
+                    </span>
+                  </span>
+                  <span>
+                    Max:{" "}
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {valueFormatter
+                        ? valueFormatter(stats.max)
+                        : formatNumber(stats.max)}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// Format numbers with commas
+const formatNumber = (value: number) => {
+  if (value === null || value === undefined) return "0";
+
+  // If it's a whole number, don't show decimals
+  if (Number.isInteger(value)) {
+    return value.toLocaleString();
+  }
+
+  // If it's a decimal, show up to 2 decimal places
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+};
+
+// Format currency if the column name suggests it
+const formatValue = (value: number, columnName: string) => {
+  const lowerCol = columnName.toLowerCase();
+
+  if (
+    lowerCol.includes("amount") ||
+    lowerCol.includes("price") ||
+    lowerCol.includes("cost") ||
+    lowerCol.includes("revenue") ||
+    lowerCol.includes("profit")
+  ) {
+    return `$${formatNumber(value)}`;
+  }
+
+  if (lowerCol.includes("percent") || lowerCol.includes("rate")) {
+    return `${formatNumber(value)}%`;
+  }
+
+  return formatNumber(value);
+};
+
 const detectVisualizationType = (data: any[]) => {
   if (!data || data.length === 0) {
     console.log("❌ No data provided");
@@ -285,7 +445,9 @@ interface DataVisualizationProps {
   data: any[];
 }
 
-export default function DataVisualization({ data }: DataVisualizationProps) {
+export default function DataVisualization({
+  data,
+}: Readonly<DataVisualizationProps>) {
   const vizConfig = useMemo(() => {
     const config = detectVisualizationType(data);
     console.log("✅ Final config:", config);
@@ -328,7 +490,7 @@ export default function DataVisualization({ data }: DataVisualizationProps) {
 
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 capitalize">
         {vizConfig.title}
       </h3>
 
@@ -349,13 +511,24 @@ export default function DataVisualization({ data }: DataVisualizationProps) {
               />
               <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "#FFF",
-                  border: "1px solid #E5E7EB",
-                  borderRadius: "8px",
-                }}
+                content={
+                  <CustomTooltip
+                    valueFormatter={(value: number) =>
+                      formatValue(value, vizConfig.y as string)
+                    }
+                  />
+                }
               />
-              <Legend wrapperStyle={{ paddingTop: "20px" }} />
+              <Legend
+                content={
+                  <CustomLegend
+                    chartData={chartData}
+                    valueFormatter={(value: number) =>
+                      formatValue(value, vizConfig.y as string)
+                    }
+                  />
+                }
+              />
               <Line
                 type="monotone"
                 dataKey={vizConfig.y}
@@ -384,13 +557,18 @@ export default function DataVisualization({ data }: DataVisualizationProps) {
               />
               <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "#FFF",
-                  border: "1px solid #E5E7EB",
-                  borderRadius: "8px",
-                }}
+                content={
+                  <CustomTooltip
+                    valueFormatter={(value: number) =>
+                      formatValue(value, vizConfig.y as string)
+                    }
+                  />
+                }
               />
-              <Legend wrapperStyle={{ paddingTop: "20px" }} />
+              {/* <Legend
+                className="capitalize"
+                wrapperStyle={{ paddingTop: "20px" }}
+              /> */}
               <Bar dataKey={vizConfig.y} radius={[8, 8, 0, 0]}>
                 {chartData.map((entry: any, index: number) => (
                   <Cell
@@ -425,7 +603,36 @@ export default function DataVisualization({ data }: DataVisualizationProps) {
                   />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip
+                content={({ active, payload }: any) => {
+                  if (!active || !payload || !payload.length) return null;
+                  const data = payload[0];
+                  return (
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-lg border-2 border-gray-200 dark:border-gray-600">
+                      <p className="font-semibold text-gray-900 dark:text-white mb-1">
+                        {data.name}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        Value:{" "}
+                        <span className="font-bold text-gray-900 dark:text-white">
+                          {formatNumber(data.value)}
+                        </span>
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        {(
+                          (data.value /
+                            chartData.reduce(
+                              (sum: number, item: any) => sum + item.value,
+                              0
+                            )) *
+                          100
+                        ).toFixed(1)}
+                        %
+                      </p>
+                    </div>
+                  );
+                }}
+              />
             </PieChart>
           </ResponsiveContainer>
         )}
