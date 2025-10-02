@@ -295,7 +295,11 @@ export default function ChatInterface() {
               />
             ) : (
               messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  connectionId={selectedConnection}
+                />
               ))
             )}
             <div ref={messagesEndRef} />

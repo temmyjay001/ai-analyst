@@ -1,14 +1,20 @@
+// components/ChatMessage.tsx
 import { AlertCircle, History } from "lucide-react";
 import { Message } from "@/types/message";
 import DataVisualization from "./DataVisualization";
 import ResultsTable from "./ResultsTable";
 import { ExportUtils } from "@/lib/exportUtils";
+import DeepAnalysisButton from "./DeepAnalysisButton";
 
 interface ChatMessageProps {
   message: Message;
+  connectionId?: string;
 }
 
-export default function ChatMessage({ message }: ChatMessageProps) {
+export default function ChatMessage({
+  message,
+  connectionId,
+}: Readonly<ChatMessageProps>) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -36,7 +42,14 @@ export default function ChatMessage({ message }: ChatMessageProps) {
           </div>
         ) : (
           <>
-            <p className="text-gray-900 dark:text-white">{message.content}</p>
+            <div
+              className="prose prose-sm dark:prose-invert max-w-none text-gray-900 dark:text-white"
+              dangerouslySetInnerHTML={{
+                __html: message.content
+                  .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                  .replace(/\n/g, "<br />"),
+              }}
+            />
 
             {message.fromHistory && (
               <div className="inline-flex items-center px-2 py-1 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded text-xs font-medium">
@@ -65,6 +78,16 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                     ExportUtils.downloadCSV(message.results!, "query-results")
                   }
                 />
+
+                {/* NEW: Deep Analysis Button */}
+                {connectionId && !message.fromHistory && (
+                  <DeepAnalysisButton
+                    question={message.content}
+                    sql={message.sql || ""}
+                    results={message.results}
+                    connectionId={connectionId}
+                  />
+                )}
               </>
             )}
 

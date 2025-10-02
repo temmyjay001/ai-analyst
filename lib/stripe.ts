@@ -10,22 +10,22 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   typescript: true,
 });
 
-// Pricing configuration
+// Pricing configuration - Ultra-Aggressive Pricing Strategy
 export const PLANS = {
   free: {
     name: "Free",
     price: 0,
-    queries_per_day: 10,
-    queries_per_month: 50,
+    queries_per_day: 3,
+    queries_per_month: 90,
     connections: 1,
     history_days: 7,
   },
   starter: {
     name: "Starter",
-    monthlyPrice: 29,
-    annualPrice: 290, // ~17% discount (2 months free)
-    queries_per_day: 100,
-    queries_per_month: 1000,
+    monthlyPrice: 9,
+    annualPrice: 94, // 13% discount ($7.83/mo effective)
+    queries_per_day: 50,
+    queries_per_month: 1500,
     connections: 3,
     history_days: 30,
     stripePriceIdMonthly: process.env.STRIPE_STARTER_MONTHLY_PRICE_ID,
@@ -33,10 +33,10 @@ export const PLANS = {
   },
   growth: {
     name: "Growth",
-    monthlyPrice: 99,
-    annualPrice: 990, // ~17% discount (2 months free)
-    queries_per_day: 500,
-    queries_per_month: 5000,
+    monthlyPrice: 39,
+    annualPrice: 408, // 13% discount ($34/mo effective)
+    queries_per_day: 300,
+    queries_per_month: 9000,
     connections: 10,
     history_days: 90,
     stripePriceIdMonthly: process.env.STRIPE_GROWTH_MONTHLY_PRICE_ID,

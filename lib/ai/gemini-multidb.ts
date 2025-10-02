@@ -2,24 +2,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { DatabaseType } from "../database/factory";
 import { buildSQLGenerationPrompt } from "./sqlGenerator";
+import { getModelForPlan } from "../models";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
-// Model selection based on user plan
-function getModelForPlan(plan: string): string {
-  switch (plan) {
-    case "free":
-      return "gemini-2.0-flash";
-    case "starter":
-      return "gemini-2.5-flash-lite";
-    case "growth":
-      return "gemini-2.5-flash";
-    case "enterprise":
-      return "gemini-2.5-pro";
-    default:
-      return "gemini-2.0-flash";
-  }
-}
 
 // Cache management
 const CACHE_TTL_SECONDS = 3600; // 1 hour

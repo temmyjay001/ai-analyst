@@ -1,4 +1,4 @@
-// components/DataVisualization.tsx - FIXED VERSION v2
+// components/DataVisualization.tsx - PRODUCTION FIXED VERSION
 "use client";
 
 import React, { useMemo } from "react";
@@ -18,91 +18,93 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-// FIXED: Much stricter date detection
+// IMPROVED: Better detection with comprehensive logging
 const detectVisualizationType = (data: any[]) => {
   if (!data || data.length === 0) {
+    console.log("❌ No data provided");
     return null;
   }
 
   const columns = Object.keys(data[0]);
   if (columns.length === 0) {
+    console.log("❌ No columns found");
     return null;
   }
 
+  console.log("🔍 Detection started:", {
+    columns,
+    rowCount: data.length,
+    sampleRow: data[0],
+  });
+
+  // Date column detection with YYYY-MM support
   const dateColumns = columns.filter((col) => {
     const colLower = col.toLowerCase();
 
-    // Must have date-related keyword in column name
     const hasDateKeyword =
       colLower.includes("date") ||
       colLower.includes("month") ||
       colLower.includes("year") ||
       colLower.includes("day") ||
-      colLower.includes("created_at") ||
-      colLower.includes("updated_at") ||
-      colLower.includes("timestamp");
+      colLower.includes("created") ||
+      colLower.includes("updated") ||
+      colLower.includes("timestamp") ||
+      colLower.includes("time");
 
-    if (!hasDateKeyword) {
-      return false; // Column name must suggest it's a date
-    }
+    if (!hasDateKeyword) return false;
 
-    // Validate the value is actually a date string (not just parseable as date)
     const sampleValue = data[0][col];
-    if (!sampleValue || typeof sampleValue !== "string") {
-      return false;
-    }
+    if (!sampleValue || typeof sampleValue !== "string") return false;
 
-    // Check if it's an ISO date string or standard date format
-    // ISO: 2024-08-31T23:00:00.000Z or 2024-08-31
-    // Standard: 08/31/2024, 31-08-2024, etc.
-    const isISODate = /^\d{4}-\d{2}-\d{2}/.test(sampleValue);
+    // Support multiple date formats
+    const isISODate = /^\d{4}-\d{2}-\d{2}/.test(sampleValue); // 2024-09-01
+    const isMonthYear = /^\d{4}-\d{2}$/.test(sampleValue); // 2024-09 ✅ YOUR FORMAT
     const hasTimeComponent =
       sampleValue.includes("T") || sampleValue.includes(":");
-    const looksLikeDate = isISODate || hasTimeComponent;
 
-    return looksLikeDate;
+    return isISODate || isMonthYear || hasTimeComponent;
   });
 
-  // Numeric detection - exclude date columns
+  // Numeric column detection - robust against string numbers
   const numericColumns = columns.filter((col) => {
     const sample = data[0][col];
     if (sample === null || sample === undefined) return false;
 
-    // Check if it's a number or a parseable numeric string
-    const isNumeric =
-      typeof sample === "number" ||
-      (typeof sample === "string" &&
-        !isNaN(parseFloat(sample)) &&
-        parseFloat(sample).toString() !== "NaN");
+    let isNumeric = false;
 
-    // Exclude date columns from numeric columns
+    if (typeof sample === "number") {
+      isNumeric = true;
+    } else if (typeof sample === "string") {
+      const cleaned = sample.replace(/,/g, "");
+      const parsed = parseFloat(cleaned);
+      isNumeric = !isNaN(parsed);
+    }
+
     const isDateCol = dateColumns.includes(col);
+    const isIdColumn = col.toLowerCase().includes("id");
 
-    return isNumeric && !isDateCol;
+    return isNumeric && !isDateCol && !isIdColumn;
   });
 
-  // Categorical detection - exclude dates and numbers
+  // Categorical detection
   const categoricalColumns = columns.filter((col) => {
     const sample = data[0][col];
     const isString = typeof sample === "string";
-    const isNotNumeric = isNaN(parseFloat(sample));
+    const cleaned = String(sample).replace(/,/g, "");
+    const isNotNumeric = isNaN(parseFloat(cleaned));
     const isNotDate = !dateColumns.includes(col);
 
     return isString && isNotNumeric && isNotDate;
   });
 
-  console.log("📊 Detection Results:", {
-    columns,
+  console.log("📊 Detection complete:", {
     dateColumns,
     numericColumns,
     categoricalColumns,
-    dataLength: data.length,
-    sampleRow: data[0],
   });
 
-  // Time series detection - PRIORITIZE THIS
+  // PRIORITY 1: Time series → LINE chart
   if (dateColumns.length > 0 && numericColumns.length > 0) {
-    // Pick the best numeric column (prefer count/amount columns, avoid IDs)
     const preferredNumeric =
       numericColumns.find((col) => {
         const lower = col.toLowerCase();
@@ -111,10 +113,12 @@ const detectVisualizationType = (data: any[]) => {
           lower.includes("amount") ||
           lower.includes("total") ||
           lower.includes("sum") ||
-          lower.includes("avg")
+          lower.includes("avg") ||
+          lower.includes("number")
         );
       }) || numericColumns[0];
 
+    console.log("✅ Using LINE chart for time series");
     return {
       type: "line",
       x: dateColumns[0],
@@ -123,12 +127,13 @@ const detectVisualizationType = (data: any[]) => {
     };
   }
 
-  // Category comparison (bar chart)
+  // PRIORITY 2: Categorical comparison → BAR chart
   if (
     categoricalColumns.length > 0 &&
     numericColumns.length > 0 &&
     data.length <= 20
   ) {
+    console.log("✅ Using BAR chart for categories");
     return {
       type: "bar",
       x: categoricalColumns[0],
@@ -140,12 +145,13 @@ const detectVisualizationType = (data: any[]) => {
     };
   }
 
-  // Distribution (pie chart) - for small datasets
+  // PRIORITY 3: Distribution → PIE chart
   if (
     categoricalColumns.length > 0 &&
     numericColumns.length > 0 &&
     data.length <= 10
   ) {
+    console.log("✅ Using PIE chart for distribution");
     return {
       type: "pie",
       label: categoricalColumns[0],
@@ -154,11 +160,11 @@ const detectVisualizationType = (data: any[]) => {
     };
   }
 
-  // FALLBACK: If we have any numeric column, try a simple bar chart
+  // FALLBACK: Bar chart with any numeric
   if (numericColumns.length > 0 && data.length <= 20) {
     const xColumn =
       columns.find((col) => !numericColumns.includes(col)) || "index";
-
+    console.log("✅ Using FALLBACK bar chart");
     return {
       type: "bar",
       x: xColumn,
@@ -168,10 +174,11 @@ const detectVisualizationType = (data: any[]) => {
     };
   }
 
+  console.log("❌ No visualization possible");
   return null;
 };
 
-// Format data for charts
+// FIXED: Clean data formatting without spreading original row
 const formatChartData = (data: any[], vizConfig: any) => {
   if (!vizConfig || !data) return [];
 
@@ -179,10 +186,10 @@ const formatChartData = (data: any[], vizConfig: any) => {
     switch (vizConfig.type) {
       case "line":
       case "bar":
-        return data.map((row) => {
+        return data.map((row, index) => {
           let xValue = row[vizConfig.x];
 
-          // Check if this is a date column
+          // Format dates for display
           const isDateColumn =
             vizConfig.x &&
             (vizConfig.x.toLowerCase().includes("date") ||
@@ -191,7 +198,6 @@ const formatChartData = (data: any[], vizConfig: any) => {
               vizConfig.x.toLowerCase().includes("created") ||
               vizConfig.x.toLowerCase().includes("updated"));
 
-          // Format dates properly using UTC to avoid timezone issues
           if (isDateColumn && xValue) {
             const date = new Date(xValue);
             if (!isNaN(date.getTime())) {
@@ -215,24 +221,50 @@ const formatChartData = (data: any[], vizConfig: any) => {
             }
           }
 
-          return {
-            ...row,
-            [vizConfig.x]: String(xValue || "").slice(0, 20),
-            [vizConfig.y]: parseFloat(row[vizConfig.y]) || 0,
-          };
+          // CRITICAL: Create clean object - no spreading
+          const chartPoint: any = {};
+
+          // X-axis: formatted string
+          chartPoint[vizConfig.x] = String(xValue || "").slice(0, 20);
+
+          // Y-axis: MUST be number for correct chart rendering
+          const yValue = row[vizConfig.y];
+          if (typeof yValue === "number") {
+            chartPoint[vizConfig.y] = yValue;
+          } else {
+            // Parse string, removing commas
+            const cleaned = String(yValue).replace(/,/g, "");
+            chartPoint[vizConfig.y] = parseFloat(cleaned) || 0;
+          }
+
+          console.log(`📈 Point ${index}:`, chartPoint);
+          return chartPoint;
         });
 
       case "pie":
-        return data.map((row) => ({
-          name: String(row[vizConfig.label] || "Unknown"),
-          value: parseFloat(row[vizConfig.value]) || 0,
-        }));
+        return data.map((row, index) => {
+          const labelValue = row[vizConfig.label];
+          const numValue = row[vizConfig.value];
+
+          let value = 0;
+          if (typeof numValue === "number") {
+            value = numValue;
+          } else {
+            const cleaned = String(numValue).replace(/,/g, "");
+            value = parseFloat(cleaned) || 0;
+          }
+
+          return {
+            name: String(labelValue || "Unknown"),
+            value,
+          };
+        });
 
       default:
         return data;
     }
   } catch (error) {
-    console.error("Error formatting chart data:", error);
+    console.error("❌ Error formatting chart data:", error);
     return [];
   }
 };
@@ -256,18 +288,21 @@ interface DataVisualizationProps {
 export default function DataVisualization({ data }: DataVisualizationProps) {
   const vizConfig = useMemo(() => {
     const config = detectVisualizationType(data);
-    console.log("✅ Visualization config:", config);
+    console.log("✅ Final config:", config);
     return config;
   }, [data]);
 
   const chartData = useMemo(() => {
     const formatted = formatChartData(data, vizConfig);
-    console.log("✅ Formatted chart data:", formatted);
+    console.log("✅ Formatted data points:", formatted.length);
+    if (formatted.length > 0) {
+      console.log("✅ First point:", formatted[0]);
+      console.log("✅ Last point:", formatted[formatted.length - 1]);
+    }
     return formatted;
   }, [data, vizConfig]);
 
   if (!vizConfig || !chartData || chartData.length === 0) {
-    console.log("❌ No visualization config or data");
     return (
       <div className="p-8 bg-gray-50 dark:bg-gray-900 rounded-lg text-center text-gray-500 dark:text-gray-400">
         <svg
@@ -280,18 +315,16 @@ export default function DataVisualization({ data }: DataVisualizationProps) {
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2}
-            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2"
           />
         </svg>
-        <p className="font-medium">No visualization available for this data</p>
+        <p className="font-medium">No visualization available</p>
         <p className="text-sm mt-1">
           Visualizations work best with time-series or categorical data
         </p>
       </div>
     );
   }
-
-  console.log("✅ Rendering chart with data:", chartData.length, "rows");
 
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">

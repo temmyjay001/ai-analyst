@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, Loader2, CreditCard, Download, Zap } from "lucide-react";
+import { Check, Loader2, CreditCard, Download, Zap, Mail } from "lucide-react";
 import { useUserStore } from "@/store/userStore";
 
 interface Subscription {
@@ -89,6 +89,11 @@ export default function BillingPage() {
     }
   };
 
+  const handleContactSales = () => {
+    window.location.href =
+      "mailto:sales@dbstuff.ai?subject=Enterprise Plan Inquiry";
+  };
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -97,47 +102,66 @@ export default function BillingPage() {
     );
   }
 
-  const discount = billingInterval === "annual" ? 17 : 0;
+  const discount = 13; // 13% annual discount
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="flex-1 p-8 overflow-y-auto">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            Billing & Subscription
+          </h1>
+          <p className="text-gray-600 dark:text-gray-300">
+            Manage your subscription and billing information
+          </p>
+        </div>
+
+        {/* Current Plan */}
         {subscription && (
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 mb-8">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+              Current Plan
+            </h2>
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Current Plan:{" "}
-                  {subscription.plan.charAt(0).toUpperCase() +
-                    subscription.plan.slice(1)}
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  {subscription.cancelAtPeriodEnd
-                    ? `Cancels on ${new Date(
-                        subscription.currentPeriodEnd
-                      ).toLocaleDateString()}`
-                    : `Renews on ${new Date(
-                        subscription.currentPeriodEnd
-                      ).toLocaleDateString()}`}
+                <p className="text-2xl font-bold text-emerald-600 capitalize mb-1">
+                  {subscription.plan}
                 </p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Status:{" "}
+                  <span className="capitalize">{subscription.status}</span>
+                </p>
+                {subscription.currentPeriodEnd && (
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {subscription.cancelAtPeriodEnd
+                      ? "Cancels on"
+                      : "Renews on"}
+                    :{" "}
+                    {new Date(
+                      subscription.currentPeriodEnd
+                    ).toLocaleDateString()}
+                  </p>
+                )}
               </div>
               <button
                 onClick={handleManageSubscription}
-                className="inline-flex items-center px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
-                <CreditCard className="h-4 w-4 mr-2" />
+                <CreditCard className="h-4 w-4" />
                 Manage Subscription
               </button>
             </div>
           </div>
         )}
 
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-            Choose Your Plan
-          </h1>
+        {/* Plans */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
+            Available Plans
+          </h2>
 
-          <div className="flex items-center justify-center space-x-3 mb-8">
+          {/* Billing Interval Toggle */}
+          <div className="flex justify-center mb-8">
             <button
               onClick={() => setBillingInterval("monthly")}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -163,7 +187,8 @@ export default function BillingPage() {
             </button>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-4 gap-6">
+            {/* Free Plan */}
             <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
                 Free
@@ -176,8 +201,8 @@ export default function BillingPage() {
               </div>
               <ul className="space-y-3 mb-6">
                 <li className="flex items-center text-sm">
-                  <Check className="h-4 w-4 text-emerald-600 mr-2" />
-                  3 queries/day
+                  <Check className="h-4 w-4 text-emerald-600 mr-2" />3
+                  queries/day
                 </li>
                 <li className="flex items-center text-sm">
                   <Check className="h-4 w-4 text-emerald-600 mr-2" />1
@@ -198,6 +223,7 @@ export default function BillingPage() {
               )}
             </div>
 
+            {/* Starter Plan */}
             <div className="bg-white dark:bg-gray-800 rounded-lg border-2 border-emerald-600 p-6 relative">
               <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                 <span className="bg-emerald-600 text-white px-3 py-1 rounded-full text-xs font-medium">
@@ -208,15 +234,20 @@ export default function BillingPage() {
                 Starter
               </h3>
               <div className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-                ${billingInterval === "monthly" ? "29" : "24"}
+                ${billingInterval === "monthly" ? "9" : "94"}
                 <span className="text-sm font-normal text-gray-500">
-                  /month
+                  /{billingInterval === "monthly" ? "month" : "year"}
                 </span>
               </div>
+              {billingInterval === "annual" && (
+                <p className="text-xs text-emerald-600 mb-2">
+                  $7.83/month billed annually
+                </p>
+              )}
               <ul className="space-y-3 mb-6">
                 <li className="flex items-center text-sm">
                   <Check className="h-4 w-4 text-emerald-600 mr-2" />
-                  100 queries/day
+                  50 queries/day
                 </li>
                 <li className="flex items-center text-sm">
                   <Check className="h-4 w-4 text-emerald-600 mr-2" />3
@@ -244,20 +275,26 @@ export default function BillingPage() {
               </button>
             </div>
 
+            {/* Growth Plan */}
             <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
                 Growth
               </h3>
               <div className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-                ${billingInterval === "monthly" ? "99" : "82"}
+                ${billingInterval === "monthly" ? "39" : "408"}
                 <span className="text-sm font-normal text-gray-500">
-                  /month
+                  /{billingInterval === "monthly" ? "month" : "year"}
                 </span>
               </div>
+              {billingInterval === "annual" && (
+                <p className="text-xs text-emerald-600 mb-2">
+                  $34/month billed annually
+                </p>
+              )}
               <ul className="space-y-3 mb-6">
                 <li className="flex items-center text-sm">
                   <Check className="h-4 w-4 text-emerald-600 mr-2" />
-                  500 queries/day
+                  300 queries/day
                 </li>
                 <li className="flex items-center text-sm">
                   <Check className="h-4 w-4 text-emerald-600 mr-2" />
@@ -284,67 +321,84 @@ export default function BillingPage() {
                 )}
               </button>
             </div>
+
+            {/* Enterprise Plan */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                Enterprise
+              </h3>
+              <div className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+                Custom
+              </div>
+              <ul className="space-y-3 mb-6">
+                <li className="flex items-center text-sm">
+                  <Check className="h-4 w-4 text-emerald-600 mr-2" />
+                  Unlimited queries
+                </li>
+                <li className="flex items-center text-sm">
+                  <Check className="h-4 w-4 text-emerald-600 mr-2" />
+                  Unlimited connections
+                </li>
+                <li className="flex items-center text-sm">
+                  <Check className="h-4 w-4 text-emerald-600 mr-2" />
+                  Dedicated support
+                </li>
+              </ul>
+              <button
+                onClick={handleContactSales}
+                className="w-full py-2 bg-gray-900 dark:bg-gray-700 text-white rounded-lg hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2"
+              >
+                <Mail className="h-4 w-4" />
+                Contact Sales
+              </button>
+            </div>
           </div>
         </div>
 
+        {/* Invoices */}
         {invoices.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Invoice History
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+              Billing History
             </h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Date
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Amount
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Invoice
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {invoices.map((invoice) => (
-                    <tr key={invoice.id}>
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                        {new Date(invoice.created * 1000).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                        ${(invoice.amount / 100).toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-medium rounded-full capitalize ${
-                            invoice.status === "paid"
-                              ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                              : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
-                          }`}
-                        >
-                          {invoice.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right">
-                        <a
-                          href={invoice.invoicePdf}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-emerald-600 hover:text-emerald-700 inline-flex items-center"
-                        >
-                          <Download className="h-4 w-4 mr-1" />
-                          Download
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-4">
+              {invoices.map((invoice) => (
+                <div
+                  key={invoice.id}
+                  className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                >
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      ${(invoice.amount / 100).toFixed(2)}
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      {new Date(invoice.created * 1000).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        invoice.status === "paid"
+                          ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                          : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                      }`}
+                    >
+                      {invoice.status}
+                    </span>
+                    {invoice.invoicePdf && (
+                      <a
+                        href={invoice.invoicePdf}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-3 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

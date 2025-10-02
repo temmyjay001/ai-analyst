@@ -13,6 +13,7 @@ import {
   Star,
   Zap,
   Shield,
+  Mail,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -175,8 +176,8 @@ export default function LandingPage() {
                     Demo Screenshot/Video Placeholder
                   </p>
                   <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-                    &quot;Show me our top customers this month&quot; → Instant chart &
-                    insights
+                    &quot;Show me our top customers this month&quot; → Instant
+                    chart & insights
                   </p>
                 </div>
               </div>
@@ -208,8 +209,8 @@ export default function LandingPage() {
                 Natural Language Queries
               </h3>
               <p className="text-gray-600 dark:text-gray-300">
-                Ask questions like &quot;Show me sales by region this month&quot; and get
-                instant answers. No SQL knowledge required.
+                Ask questions like &quot;Show me sales by region this
+                month&quot; and get instant answers. No SQL knowledge required.
               </p>
             </div>
 
@@ -249,14 +250,15 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
-              Simple, startup-friendly pricing
+              Ultra-competitive pricing
             </h2>
             <p className="text-xl text-gray-600 dark:text-gray-300">
-              Start free, upgrade when you need more. No hidden fees.
+              Start free, upgrade when you need more. 64% cheaper than
+              competitors.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {/* Free Plan */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 border border-gray-200 dark:border-gray-700">
               <div className="text-center mb-8">
@@ -270,7 +272,7 @@ export default function LandingPage() {
                   </span>
                 </div>
                 <p className="text-gray-600 dark:text-gray-300">
-                  Perfect for trying out the platform
+                  Perfect for trying out
                 </p>
               </div>
 
@@ -278,7 +280,7 @@ export default function LandingPage() {
                 <li className="flex items-center">
                   <Check className="h-5 w-5 text-emerald-600 mr-3" />
                   <span className="text-gray-600 dark:text-gray-300">
-                    10 queries per day
+                    3 queries per day
                   </span>
                 </li>
                 <li className="flex items-center">
@@ -296,59 +298,110 @@ export default function LandingPage() {
                 <li className="flex items-center">
                   <Check className="h-5 w-5 text-emerald-600 mr-3" />
                   <span className="text-gray-600 dark:text-gray-300">
-                    Basic charts & exports
+                    Basic visualizations
                   </span>
                 </li>
               </ul>
 
               <Link
-                href="/auth/signup"
-                className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors text-center block"
+                href="/signup"
+                className="block w-full text-center py-3 px-6 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
               >
-                Start Free
+                Get Started Free
               </Link>
             </div>
 
             {/* Starter Plan */}
-            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-2xl p-8 border-2 border-emerald-200 dark:border-emerald-700 relative">
+            <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-8 border-2 border-emerald-400 relative transform scale-105">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                <span className="bg-emerald-600 text-white px-4 py-1 rounded-full text-sm font-medium">
-                  Most Popular
+                <span className="bg-yellow-400 text-gray-900 px-4 py-1 rounded-full text-sm font-bold">
+                  MOST POPULAR
                 </span>
               </div>
+              <div className="text-center mb-8">
+                <h3 className="text-2xl font-bold text-white mb-2">Starter</h3>
+                <div className="text-4xl font-bold text-white mb-2">
+                  $9
+                  <span className="text-lg font-normal text-emerald-100">
+                    /month
+                  </span>
+                </div>
+                <p className="text-emerald-100">Or $94/year (save 13%)</p>
+              </div>
 
+              <ul className="space-y-4 mb-8">
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-white mr-3" />
+                  <span className="text-white font-medium">
+                    50 queries per day
+                  </span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-white mr-3" />
+                  <span className="text-white">3 database connections</span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-white mr-3" />
+                  <span className="text-white">30-day query history</span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-white mr-3" />
+                  <span className="text-white">Advanced visualizations</span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-white mr-3" />
+                  <span className="text-white">Priority email support</span>
+                </li>
+              </ul>
+
+              <Link
+                href="/signup"
+                className="block w-full text-center py-3 px-6 bg-white text-emerald-600 rounded-lg hover:bg-emerald-50 transition-colors font-bold"
+              >
+                Start 14-Day Trial
+              </Link>
+            </div>
+
+            {/* Growth Plan */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 border border-gray-200 dark:border-gray-700">
               <div className="text-center mb-8">
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  Starter
+                  Growth
                 </h3>
                 <div className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-                  $29
+                  $39
                   <span className="text-lg font-normal text-gray-500">
                     /month
                   </span>
                 </div>
                 <p className="text-gray-600 dark:text-gray-300">
-                  For growing teams and businesses
+                  Or $408/year (save 13%)
                 </p>
               </div>
 
               <ul className="space-y-4 mb-8">
                 <li className="flex items-center">
                   <Check className="h-5 w-5 text-emerald-600 mr-3" />
-                  <span className="text-gray-600 dark:text-gray-300">
-                    100 queries per day
+                  <span className="text-gray-600 dark:text-gray-300 font-medium">
+                    300 queries per day
                   </span>
                 </li>
                 <li className="flex items-center">
                   <Check className="h-5 w-5 text-emerald-600 mr-3" />
                   <span className="text-gray-600 dark:text-gray-300">
-                    3 database connections
+                    10 database connections
                   </span>
                 </li>
                 <li className="flex items-center">
                   <Check className="h-5 w-5 text-emerald-600 mr-3" />
                   <span className="text-gray-600 dark:text-gray-300">
-                    30-day query history
+                    90-day query history
+                  </span>
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-5 w-5 text-emerald-600 mr-3" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    Team collaboration (25 members)
                   </span>
                 </li>
                 <li className="flex items-center">
@@ -360,34 +413,43 @@ export default function LandingPage() {
                 <li className="flex items-center">
                   <Check className="h-5 w-5 text-emerald-600 mr-3" />
                   <span className="text-gray-600 dark:text-gray-300">
-                    Priority support
-                  </span>
-                </li>
-                <li className="flex items-center">
-                  <Star className="h-5 w-5 text-amber-500 mr-3" />
-                  <span className="text-gray-600 dark:text-gray-300">
-                    Advanced AI models
+                    Live chat support
                   </span>
                 </li>
               </ul>
 
               <Link
-                href="/auth/signup"
-                className="w-full bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-3 rounded-lg font-semibold transition-colors text-center block"
+                href="/signup"
+                className="block w-full text-center py-3 px-6 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
               >
-                Start 14-Day Free Trial
+                Start Free Trial
               </Link>
             </div>
           </div>
 
-          <div className="text-center mt-12">
-            <p className="text-gray-600 dark:text-gray-300">
-              Need more?{" "}
-              <span className="text-emerald-600 font-semibold">
-                Enterprise plans
-              </span>{" "}
-              available with unlimited usage.
+          {/* Enterprise CTA */}
+          <div className="mt-12 text-center">
+            <p className="text-gray-600 dark:text-gray-300 mb-4">
+              Need unlimited queries and dedicated support?
             </p>
+            <a
+              href="mailto:sales@dbstuff.ai?subject=Enterprise Plan Inquiry"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 dark:bg-gray-700 text-white rounded-lg hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors font-medium"
+            >
+              <Mail className="h-5 w-5" />
+              Contact Sales for Enterprise
+            </a>
+          </div>
+
+          {/* Comparison badge */}
+          <div className="mt-12 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-full">
+              <Zap className="h-5 w-5 text-emerald-600" />
+              <span className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
+                64% cheaper than competitors like Outerbase ($25/mo) and NLSQL
+                ($29/mo)
+              </span>
+            </div>
           </div>
         </div>
       </section>
