@@ -207,6 +207,14 @@ const abbreviateNumber = (value: number): string => {
 
 const CustomYAxisTick = ({ x, y, payload, valueFormatter }: any) => {
   const [showTooltip, setShowTooltip] = React.useState(false);
+  const tooltipId = `yaxis-tooltip-${payload.value}`;
+
+  // Store tooltip state in a ref that can be accessed by overlay
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as any)[tooltipId] = showTooltip;
+    }
+  }, [showTooltip, tooltipId]);
 
   return (
     <g transform={`translate(${x},${y})`}>
@@ -220,29 +228,37 @@ const CustomYAxisTick = ({ x, y, payload, valueFormatter }: any) => {
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
         style={{ cursor: "pointer" }}
+        data-tooltip-value={payload.value}
+        data-tooltip-formatted={
+          valueFormatter
+            ? valueFormatter(payload.value)
+            : formatNumber(payload.value)
+        }
       >
         {abbreviateNumber(payload.value)}
       </text>
 
-      {showTooltip && (
-        <g>
+      {/* {showTooltip && (
+        <g style={{ pointerEvents: "none" }}>
           <rect
-            x={-140}
-            y={-20}
-            width={130}
-            height={28}
+            x={10}
+            y={-16}
+            width={140}
+            height={32}
             fill="white"
             stroke="#E5E7EB"
-            strokeWidth={1}
-            rx={4}
-            style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.1))" }}
+            strokeWidth={2}
+            rx={6}
+            style={{
+              filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.15))",
+            }}
           />
           <text
-            x={-75}
-            y={-2}
+            x={80}
+            y={4}
             textAnchor="middle"
             fill="#111827"
-            fontSize={12}
+            fontSize={13}
             fontWeight={600}
           >
             {valueFormatter
@@ -250,8 +266,91 @@ const CustomYAxisTick = ({ x, y, payload, valueFormatter }: any) => {
               : formatNumber(payload.value)}
           </text>
         </g>
-      )}
+      )} */}
     </g>
+  );
+};
+
+const YAxisTooltipOverlay = ({
+  chartData,
+  yAxisValues,
+  valueFormatter,
+}: any) => {
+  const [activeTooltip, setActiveTooltip] = React.useState<{
+    value: number;
+    x: number;
+    y: number;
+    formatted: string;
+  } | null>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const target = e.target as SVGTextElement;
+      if (target.hasAttribute && target.hasAttribute("data-tooltip-value")) {
+        const value = parseFloat(
+          target.getAttribute("data-tooltip-value") || "0"
+        );
+        const formatted = target.getAttribute("data-tooltip-formatted") || "";
+        const rect = target.getBoundingClientRect();
+
+        // Calculate position relative to the chart container
+        const containerRect = containerRef.current?.getBoundingClientRect();
+        if (containerRect) {
+          const relativeX = rect.right - containerRect.left + 10; // 10px to the right of tick
+          const relativeY = rect.top - containerRect.top + rect.height / 2;
+          setActiveTooltip({ value, x: relativeX, y: relativeY, formatted });
+        }
+      }
+    };
+
+    const handleMouseOut = (e: MouseEvent) => {
+      const target = e.target as SVGTextElement;
+      const relatedTarget = e.relatedTarget as Element;
+
+      // Only hide if we're not moving to another Y-axis tick
+      if (target.hasAttribute && target.hasAttribute("data-tooltip-value")) {
+        if (
+          !relatedTarget ||
+          !relatedTarget.hasAttribute ||
+          !relatedTarget.hasAttribute("data-tooltip-value")
+        ) {
+          setActiveTooltip(null);
+        }
+      }
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseout", handleMouseOut);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseout", handleMouseOut);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+    >
+      {activeTooltip && (
+        <div
+          style={{
+            position: "absolute",
+            left: `${activeTooltip.x}px`,
+            top: `${activeTooltip.y}px`,
+            transform: "translateY(-50%)",
+            zIndex: 9999,
+          }}
+          className="bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-lg border-2 border-gray-200 dark:border-gray-600"
+        >
+          <span className="text-sm font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+            {activeTooltip.formatted}
+          </span>
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -583,14 +682,22 @@ export default function DataVisualization({
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 relative">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 capitalize">
         {vizConfig.title}
       </h3>
 
+      <YAxisTooltipOverlay
+        chartData={chartData}
+        yAxisValues={[]}
+        valueFormatter={(value: number) =>
+          formatValue(value, vizConfig.y as string)
+        }
+      />
+
       <div className="w-full" style={{ overflowX: "auto" }}>
         {vizConfig.type === "line" && (
-          <ResponsiveContainer width="100%" height={400} minWidth={300}>
+          <ResponsiveContainer width="100%" height={500} minWidth={300}>
             <LineChart
               data={chartData}
               margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
