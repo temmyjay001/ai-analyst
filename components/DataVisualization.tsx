@@ -1,4 +1,4 @@
-// components/DataVisualization.tsx - PRODUCTION FIXED VERSION
+// components/DataVisualization.tsx
 "use client";
 
 import React, { useMemo } from "react";
