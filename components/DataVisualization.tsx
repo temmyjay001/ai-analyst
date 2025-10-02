@@ -22,24 +22,41 @@ const CustomTooltip = ({ active, payload, label, valueFormatter }: any) => {
   if (!active || !payload || !payload.length) return null;
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600">
-      <p className="font-semibold text-gray-900 dark:text-white mb-2">
+    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-lg border-2 border-gray-200 dark:border-gray-600">
+      <p className="font-semibold text-gray-900 dark:text-white mb-2 capitalize">
         {label}
       </p>
-      {payload.map((entry: any, index: number) => (
-        <div key={index} className="flex items-center gap-2">
-          <div
-            className="w-3 h-3 rounded-full"
-            style={{ backgroundColor: entry.color }}
-          />
-          <span className="text-sm text-gray-600 dark:text-gray-300 capitalize">
-            {String(entry.name).split("_").join(" ")}:
-          </span>
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">
-            {valueFormatter ? valueFormatter(entry.value) : entry.value}
-          </span>
-        </div>
-      ))}
+      {payload.map((entry: any, index: number) => {
+        const fullValue = valueFormatter
+          ? valueFormatter(entry.value)
+          : formatNumber(entry.value);
+        const abbreviated = abbreviateNumber(entry.value);
+        const showAbbreviation = Math.abs(entry.value) >= 1000;
+
+        return (
+          <div key={index} className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-3 h-3 rounded-full flex-shrink-0"
+                style={{ backgroundColor: entry.color }}
+              />
+              <span className="text-sm text-gray-600 dark:text-gray-300 capitalize flex-shrink-0">
+                {String(entry.name).split("_").join(" ")}:
+              </span>
+            </div>
+            <div className="ml-5 flex flex-col">
+              <span className="text-sm font-bold text-gray-900 dark:text-white">
+                {fullValue}
+              </span>
+              {showAbbreviation && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  ({abbreviated})
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -158,7 +175,86 @@ const formatNumber = (value: number) => {
   });
 };
 
-// Format currency if the column name suggests it
+const abbreviateNumber = (value: number): string => {
+  if (value === null || value === undefined) return "0";
+
+  const absValue = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+
+  // Trillions
+  if (absValue >= 1e12) {
+    return sign + (absValue / 1e12).toFixed(1) + "T";
+  }
+  // Billions
+  if (absValue >= 1e9) {
+    return sign + (absValue / 1e9).toFixed(1) + "B";
+  }
+  // Millions
+  if (absValue >= 1e6) {
+    return sign + (absValue / 1e6).toFixed(1) + "M";
+  }
+  // Thousands
+  if (absValue >= 1e3) {
+    return sign + (absValue / 1e3).toFixed(1) + "K";
+  }
+
+  // Less than 1000, show as-is (with decimals if needed)
+  if (Number.isInteger(value)) {
+    return value.toString();
+  }
+  return value.toFixed(1);
+};
+
+const CustomYAxisTick = ({ x, y, payload, valueFormatter }: any) => {
+  const [showTooltip, setShowTooltip] = React.useState(false);
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0}
+        y={0}
+        dy={4}
+        textAnchor="end"
+        fill="#6B7280"
+        fontSize={11}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        style={{ cursor: "pointer" }}
+      >
+        {abbreviateNumber(payload.value)}
+      </text>
+
+      {showTooltip && (
+        <g>
+          <rect
+            x={-140}
+            y={-20}
+            width={130}
+            height={28}
+            fill="white"
+            stroke="#E5E7EB"
+            strokeWidth={1}
+            rx={4}
+            style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.1))" }}
+          />
+          <text
+            x={-75}
+            y={-2}
+            textAnchor="middle"
+            fill="#111827"
+            fontSize={12}
+            fontWeight={600}
+          >
+            {valueFormatter
+              ? valueFormatter(payload.value)
+              : formatNumber(payload.value)}
+          </text>
+        </g>
+      )}
+    </g>
+  );
+};
+
 const formatValue = (value: number, columnName: string) => {
   const lowerCol = columnName.toLowerCase();
 
@@ -197,7 +293,6 @@ const detectVisualizationType = (data: any[]) => {
     sampleRow: data[0],
   });
 
-  // Date column detection with YYYY-MM support
   const dateColumns = columns.filter((col) => {
     const colLower = col.toLowerCase();
 
@@ -218,7 +313,7 @@ const detectVisualizationType = (data: any[]) => {
 
     // Support multiple date formats
     const isISODate = /^\d{4}-\d{2}-\d{2}/.test(sampleValue); // 2024-09-01
-    const isMonthYear = /^\d{4}-\d{2}$/.test(sampleValue); // 2024-09 ✅ YOUR FORMAT
+    const isMonthYear = /^\d{4}-\d{2}$/.test(sampleValue); // 2024-09
     const hasTimeComponent =
       sampleValue.includes("T") || sampleValue.includes(":");
 
@@ -338,7 +433,6 @@ const detectVisualizationType = (data: any[]) => {
   return null;
 };
 
-// FIXED: Clean data formatting without spreading original row
 const formatChartData = (data: any[], vizConfig: any) => {
   if (!vizConfig || !data) return [];
 
@@ -509,7 +603,16 @@ export default function DataVisualization({
                 textAnchor="end"
                 height={100}
               />
-              <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} />
+              <YAxis
+                tick={
+                  <CustomYAxisTick
+                    valueFormatter={(value: number) =>
+                      formatValue(value, vizConfig.y as string)
+                    }
+                  />
+                }
+                width={40}
+              />
               <Tooltip
                 content={
                   <CustomTooltip
@@ -555,7 +658,16 @@ export default function DataVisualization({
                 textAnchor="end"
                 interval={0}
               />
-              <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} />
+              <YAxis
+                tick={
+                  <CustomYAxisTick
+                    valueFormatter={(value: number) =>
+                      formatValue(value, vizConfig.y as string)
+                    }
+                  />
+                }
+                width={40}
+              />
               <Tooltip
                 content={
                   <CustomTooltip
