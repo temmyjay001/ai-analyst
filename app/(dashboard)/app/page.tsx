@@ -1,6 +1,6 @@
 // app/(dashboard)/app/page.tsx
-import UnifiedChatInterface from "@/components/UnifiedChatInterface";
+import ChatContent from "@/components/ChatContent";
 
 export default function NewChatPage() {
-  return <UnifiedChatInterface />;
+  return <ChatContent />;
 }

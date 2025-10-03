@@ -1,12 +1,13 @@
 // app/(dashboard)/app/[sessionId]/page.tsx
-import UnifiedChatInterface from "@/components/UnifiedChatInterface";
+import ChatContent from "@/components/ChatContent";
 
 interface SessionPageProps {
-  params: {
+  params: Promise<{
     sessionId: string;
-  };
+  }>;
 }
 
-export default function SessionPage({ params }: SessionPageProps) {
-  return <UnifiedChatInterface sessionId={params.sessionId} />;
+export default async function SessionPage({ params }: SessionPageProps) {
+  const { sessionId } = await params;
+  return <ChatContent sessionId={sessionId} />;
 }
