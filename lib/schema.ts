@@ -60,29 +60,46 @@ export const verificationTokens = pgTable("verification_tokens", {
   expires: timestamp("expires").notNull(),
 });
 
-// Database connections - FIXED: Made fields nullable to match migration
+// Database connections
 export const databaseConnections = pgTable("database_connections", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
-  type: varchar("type", { length: 50 }).notNull(), // postgresql, mysql
-  host: varchar("host", { length: 255 }), // NULLABLE - can use URL instead
-  port: integer("port"), // NULLABLE - can use URL instead
-  database: varchar("database", { length: 255 }), // NULLABLE - can use URL instead
-  username: varchar("username", { length: 255 }), // NULLABLE - can use URL instead
-  passwordEncrypted: text("password_encrypted"), // NULLABLE - can use URL instead
-  connectionUrlEncrypted: text("connection_url_encrypted"), // Store full URL if provided
+  type: varchar("type", { length: 50 }).notNull(),
+  host: varchar("host", { length: 255 }),
+  port: integer("port"),
+  database: varchar("database", { length: 255 }),
+  username: varchar("username", { length: 255 }),
+  passwordEncrypted: text("password_encrypted"),
+  connectionUrlEncrypted: text("connection_url_encrypted"),
   ssl: boolean("ssl").default(false),
   isActive: boolean("is_active").default(true),
   lastTestedAt: timestamp("last_tested_at"),
-  testStatus: varchar("test_status", { length: 50 }).default("pending"), // pending, success, failed
+  testStatus: varchar("test_status", { length: 50 }).default("pending"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Query history
+// NEW: Chat Sessions table
+export const chatSessions = pgTable("chat_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  connectionId: uuid("connection_id")
+    .notNull()
+    .references(() => databaseConnections.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  plan: varchar("plan", { length: 50 }).notNull(), // Snapshot of user's plan at creation
+  isMultiTurn: boolean("is_multi_turn").notNull().default(false), // false for Free/Starter, true for Growth+
+  messageCount: integer("message_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// MODIFIED: Queries table with session support
 export const queries = pgTable("queries", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")
@@ -91,10 +108,15 @@ export const queries = pgTable("queries", {
   connectionId: uuid("connection_id")
     .notNull()
     .references(() => databaseConnections.id, { onDelete: "cascade" }),
-  question: text("question").notNull(),
-  sqlGenerated: text("sql_generated"),
-  results: jsonb("results"),
-  interpretation: text("interpretation"),
+  sessionId: uuid("session_id")
+    .notNull()
+    .references(() => chatSessions.id, { onDelete: "cascade" }),
+  role: varchar("role", { length: 50 }).notNull(), // 'user' or 'assistant'
+  messageIndex: integer("message_index").notNull().default(0), // Order within session
+  question: text("question"), // Only for user messages
+  sqlGenerated: text("sql_generated"), // Only for assistant messages
+  results: jsonb("results"), // Only for assistant messages
+  interpretation: text("interpretation"), // Only for assistant messages
   executionTimeMs: integer("execution_time_ms"),
   rowCount: integer("row_count"),
   isFavorite: boolean("is_favorite").default(false),
@@ -105,7 +127,7 @@ export const queries = pgTable("queries", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Subscriptions (for Stripe integration)
+// Subscriptions
 export const subscriptions = pgTable("subscriptions", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")
@@ -132,7 +154,7 @@ export const usageTracking = pgTable("usage_tracking", {
     .references(() => users.id, { onDelete: "cascade" }),
   date: date("date").notNull(),
   queryCount: integer("query_count").default(0),
-  aiCostCents: integer("ai_cost_cents").default(0), // Track AI costs in cents
+  aiCostCents: integer("ai_cost_cents").default(0),
   exportCount: integer("export_count").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -142,17 +164,40 @@ export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
   sessions: many(sessions),
   connections: many(databaseConnections),
+  chatSessions: many(chatSessions),
   queries: many(queries),
-  subscriptions: many(subscriptions),
-  usageTracking: many(usageTracking),
+  subscription: many(subscriptions),
+  usage: many(usageTracking),
 }));
 
-export const accountsRelations = relations(accounts, ({ one }) => ({
-  user: one(users, { fields: [accounts.userId], references: [users.id] }),
-}));
+export const chatSessionsRelations = relations(
+  chatSessions,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [chatSessions.userId],
+      references: [users.id],
+    }),
+    connection: one(databaseConnections, {
+      fields: [chatSessions.connectionId],
+      references: [databaseConnections.id],
+    }),
+    queries: many(queries),
+  })
+);
 
-export const sessionsRelations = relations(sessions, ({ one }) => ({
-  user: one(users, { fields: [sessions.userId], references: [users.id] }),
+export const queriesRelations = relations(queries, ({ one }) => ({
+  user: one(users, {
+    fields: [queries.userId],
+    references: [users.id],
+  }),
+  connection: one(databaseConnections, {
+    fields: [queries.connectionId],
+    references: [databaseConnections.id],
+  }),
+  session: one(chatSessions, {
+    fields: [queries.sessionId],
+    references: [chatSessions.id],
+  }),
 }));
 
 export const databaseConnectionsRelations = relations(
@@ -163,21 +208,34 @@ export const databaseConnectionsRelations = relations(
       references: [users.id],
     }),
     queries: many(queries),
+    chatSessions: many(chatSessions),
   })
 );
 
-export const queriesRelations = relations(queries, ({ one }) => ({
-  user: one(users, { fields: [queries.userId], references: [users.id] }),
-  connection: one(databaseConnections, {
-    fields: [queries.connectionId],
-    references: [databaseConnections.id],
+export const accountsRelations = relations(accounts, ({ one }) => ({
+  user: one(users, {
+    fields: [accounts.userId],
+    references: [users.id],
+  }),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, {
+    fields: [sessions.userId],
+    references: [users.id],
   }),
 }));
 
 export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
-  user: one(users, { fields: [subscriptions.userId], references: [users.id] }),
+  user: one(users, {
+    fields: [subscriptions.userId],
+    references: [users.id],
+  }),
 }));
 
 export const usageTrackingRelations = relations(usageTracking, ({ one }) => ({
-  user: one(users, { fields: [usageTracking.userId], references: [users.id] }),
+  user: one(users, {
+    fields: [usageTracking.userId],
+    references: [users.id],
+  }),
 }));

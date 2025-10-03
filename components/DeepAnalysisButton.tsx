@@ -21,6 +21,7 @@ interface DeepAnalysisButtonProps {
   sql: string;
   results: any[];
   connectionId: string;
+  sessionId: string;
 }
 
 export default function DeepAnalysisButton({
@@ -28,7 +29,8 @@ export default function DeepAnalysisButton({
   sql,
   results,
   connectionId,
-}: DeepAnalysisButtonProps) {
+  sessionId,
+}: Readonly<DeepAnalysisButtonProps>) {
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<DeepAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,7 @@ export default function DeepAnalysisButton({
           sql,
           results,
           connectionId,
+          sessionId,
         }),
       });
 

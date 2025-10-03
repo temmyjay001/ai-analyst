@@ -13,4 +13,7 @@ export default {
   },
   verbose: true,
   strict: true,
+  // migrations: {
+  //   prefix: "timestamp",
+  // },
 } satisfies Config;

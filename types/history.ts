@@ -1,5 +1,6 @@
 export interface QueryHistoryItem {
   id: string;
+  sessionId: string;
   question: string;
   sql?: string;
   results?: any[];

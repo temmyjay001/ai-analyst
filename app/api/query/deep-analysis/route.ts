@@ -1,4 +1,4 @@
-// app/api/query/deep-analysis/route.ts
+// app/api/query/deep-analysis/route.ts - CORRECTED with Sessions
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
@@ -8,6 +8,7 @@ import {
   databaseConnections,
   queries,
   usageTracking,
+  chatSessions,
 } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { executeDeepAnalysis, canRunDeepAnalysis } from "@/lib/ai/deepAnalysis";
@@ -34,11 +35,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { question, sql, results, connectionId } = await req.json();
+    const { question, sql, results, connectionId, sessionId } =
+      await req.json();
 
-    if (!question || !sql || !results || !connectionId) {
+    if (!question || !sql || !results || !connectionId || !sessionId) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields" },
+        {
+          success: false,
+          error: "Missing required fields (including sessionId)",
+        },
         { status: 400 }
       );
     }
@@ -70,6 +75,22 @@ export async function POST(req: NextRequest) {
           requiredPlan: "growth",
         },
         { status: 403 }
+      );
+    }
+
+    // Verify session ownership
+    const chatSession = await db
+      .select()
+      .from(chatSessions)
+      .where(
+        and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))
+      )
+      .limit(1);
+
+    if (!chatSession[0]) {
+      return NextResponse.json(
+        { success: false, error: "Session not found or unauthorized" },
+        { status: 404 }
       );
     }
 
@@ -124,7 +145,6 @@ export async function POST(req: NextRequest) {
     }
 
     const dbType = connection[0].type;
-
     const connectionConfig = connection[0] as ConnectionConfig;
 
     // Get schema context
@@ -141,6 +161,48 @@ export async function POST(req: NextRequest) {
       userPlan
     );
 
+    // Get current message index in session
+    const messageIndex: number = chatSession[0].messageCount ?? 0;
+
+    // Save deep analysis user message
+    await db.insert(queries).values({
+      userId,
+      connectionId,
+      sessionId,
+      role: "user",
+      messageIndex,
+      question: `[Deep Analysis Request] ${question}`,
+    });
+
+    // Save deep analysis results as assistant message
+    await db.insert(queries).values({
+      userId,
+      connectionId,
+      sessionId,
+      role: "assistant",
+      messageIndex: messageIndex + 1,
+      sqlGenerated: sql,
+      results: JSON.stringify({
+        original: analysisResult.originalResults.slice(0, 100),
+        followUps: analysisResult.followUpSteps.map((step) => ({
+          question: step.question,
+          results: step.results.slice(0, 50),
+        })),
+      }),
+      interpretation: analysisResult.comprehensiveInsights,
+      executionTimeMs: analysisResult.executionTimeMs,
+      rowCount: analysisResult.originalResults.length,
+    });
+
+    // Update session message count
+    await db
+      .update(chatSessions)
+      .set({
+        messageCount: messageIndex + 2,
+        updatedAt: new Date(),
+      })
+      .where(eq(chatSessions.id, sessionId));
+
     // Update usage tracking - add 3 queries for follow-ups
     const newQueryCount = currentQueryCount + 3;
     if (usage[0]) {
@@ -156,28 +218,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Save deep analysis to query history
-    await db.insert(queries).values({
-      userId,
-      connectionId,
-      question: `[Deep Analysis] ${question}`,
-      sqlGenerated: sql,
-      results: JSON.stringify({
-        original: analysisResult.originalResults.slice(0, 100),
-        followUps: analysisResult.followUpSteps.map((step) => ({
-          question: step.question,
-          results: step.results.slice(0, 50),
-        })),
-      }),
-      interpretation: analysisResult.comprehensiveInsights,
-      executionTimeMs: analysisResult.executionTimeMs,
-      rowCount: analysisResult.originalResults.length,
-    });
-
     const totalTime = Date.now() - startTime;
 
     return NextResponse.json({
       success: true,
+      sessionId,
       analysis: analysisResult,
       queriesUsed: 3,
       totalExecutionTime: totalTime,

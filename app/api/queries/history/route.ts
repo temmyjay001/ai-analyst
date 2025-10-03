@@ -29,10 +29,11 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const limit = parseInt(url.searchParams.get("limit") || "50");
 
-    // Fetch query history
+    // Fetch query history - only assistant messages to avoid duplicates
     const queryHistory = await db
       .select({
         id: queries.id,
+        sessionId: queries.sessionId,
         question: queries.question,
         sqlGenerated: queries.sqlGenerated,
         results: queries.results,

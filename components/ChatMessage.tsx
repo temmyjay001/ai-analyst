@@ -1,25 +1,47 @@
-// components/ChatMessage.tsx
+// components/ChatMessage.tsx - MINIMAL CHANGE: Just update the interface
 import { AlertCircle, History } from "lucide-react";
-import { Message } from "@/types/message";
 import DataVisualization from "./DataVisualization";
 import ResultsTable from "./ResultsTable";
 import { ExportUtils } from "@/lib/exportUtils";
 import DeepAnalysisButton from "./DeepAnalysisButton";
 
+// Update interface to match database fields
+interface Message {
+  id: string;
+  role: "user" | "assistant" | "system";
+  // Database fields
+  question?: string;
+  interpretation?: string;
+  sqlGenerated?: string;
+  executionTimeMs?: number;
+  // Keep these as-is
+  results?: any[];
+  rowCount?: number;
+  error?: string;
+  createdAt?: Date;
+  fromHistory?: boolean;
+}
+
 interface ChatMessageProps {
   message: Message;
   connectionId?: string;
+  sessionId?: string;
 }
 
 export default function ChatMessage({
   message,
   connectionId,
+  sessionId,
 }: Readonly<ChatMessageProps>) {
+  // Get content from appropriate field
+  const content =
+    message.role === "user" ? message.question : message.interpretation;
+
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
         <div className="max-w-3xl bg-emerald-600 text-white rounded-lg px-4 py-3">
-          <p className="text-sm">{message.content}</p>
+          <p className="text-sm">{content}</p>
         </div>
       </div>
     );
@@ -36,7 +58,7 @@ export default function ChatMessage({
                 Error
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                {message.content}
+                {content || message.error}
               </p>
             </div>
           </div>
@@ -45,7 +67,7 @@ export default function ChatMessage({
             <div
               className="prose prose-sm dark:prose-invert max-w-none text-gray-900 dark:text-white"
               dangerouslySetInnerHTML={{
-                __html: message.content
+                __html: (content || "")
                   .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
                   .replace(/\n/g, "<br />"),
               }}
@@ -58,13 +80,13 @@ export default function ChatMessage({
               </div>
             )}
 
-            {message.sql && (
+            {message.sqlGenerated && (
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
                   SQL Query
                 </p>
                 <code className="text-sm text-gray-900 dark:text-white font-mono">
-                  {message.sql}
+                  {message.sqlGenerated}
                 </code>
               </div>
             )}
@@ -79,24 +101,24 @@ export default function ChatMessage({
                   }
                 />
 
-                {/* NEW: Deep Analysis Button */}
-                {connectionId && !message.fromHistory && (
+                {connectionId && sessionId && !message.fromHistory && (
                   <DeepAnalysisButton
-                    question={message.content}
-                    sql={message.sql || ""}
+                    question={content || ""}
+                    sql={message.sqlGenerated || ""}
                     results={message.results}
                     connectionId={connectionId}
+                    sessionId={sessionId}
                   />
                 )}
               </>
             )}
 
-            {message.executionTime && (
+            {message.executionTimeMs && (
               <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
                 {message.rowCount !== undefined && (
                   <span>{message.rowCount} rows</span>
                 )}
-                <span>{message.executionTime}ms</span>
+                <span>{message.executionTimeMs}ms</span>
               </div>
             )}
           </>

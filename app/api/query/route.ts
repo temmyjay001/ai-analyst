@@ -1,4 +1,4 @@
-// app/api/query/route.ts
+// app/api/query/route.ts - CORRECTED VERSION with Sessions
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
@@ -8,12 +8,13 @@ import {
   databaseConnections,
   queries,
   usageTracking,
+  chatSessions,
 } from "@/lib/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { executeQuery, DatabaseType } from "@/lib/database/factory";
 import { getSchemaContext } from "@/lib/database/schemaIntrospection";
 
-// Schema cache
+// Schema cache (keep existing implementation)
 const schemaCache = new Map<
   string,
   { formatted: string; timestamp: number; dbType: DatabaseType }
@@ -28,6 +29,9 @@ const PLAN_LIMITS = {
   enterprise: Infinity,
 };
 
+// Multi-turn chat support per plan
+const MULTI_TURN_PLANS = ["growth", "enterprise"];
+
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
 
@@ -41,7 +45,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { question, connectionId } = await req.json();
+    const { question, connectionId, sessionId } = await req.json();
 
     if (!question || !connectionId) {
       return NextResponse.json(
@@ -85,12 +89,69 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Daily query limit reached (${limit} queries). Please upgrade your plan.`,
-          limit,
-          used: currentQueryCount,
+          error: `Daily query limit reached (${limit} queries). Upgrade your plan for more queries.`,
+          limitReached: true,
         },
         { status: 429 }
       );
+    }
+
+    // Check if multi-turn is allowed for this plan
+    const isMultiTurnAllowed = MULTI_TURN_PLANS.includes(userPlan);
+
+    // Handle session creation or validation
+    let currentSessionId = sessionId;
+    let currentSession;
+
+    if (sessionId) {
+      // Validate existing session
+      currentSession = await db
+        .select()
+        .from(chatSessions)
+        .where(
+          and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId))
+        )
+        .limit(1);
+
+      if (!currentSession[0]) {
+        return NextResponse.json(
+          { success: false, error: "Session not found" },
+          { status: 404 }
+        );
+      }
+
+      // Check if user plan allows multi-turn
+      if (!isMultiTurnAllowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Multi-turn conversations require Growth plan or higher",
+            upgradeRequired: true,
+          },
+          { status: 403 }
+        );
+      }
+
+      currentSessionId = sessionId;
+    } else {
+      // Create new session
+      const title =
+        question.length > 50 ? question.substring(0, 50) + "..." : question;
+
+      const newSession = await db
+        .insert(chatSessions)
+        .values({
+          userId,
+          connectionId,
+          title,
+          plan: userPlan,
+          isMultiTurn: isMultiTurnAllowed,
+          messageCount: 0,
+        })
+        .returning();
+
+      currentSessionId = newSession[0].id;
+      currentSession = newSession;
     }
 
     // Get database connection
@@ -115,7 +176,7 @@ export async function POST(req: NextRequest) {
     const dbConfig = connection[0];
     const dbType = dbConfig.type as DatabaseType;
 
-    // Schema caching with database type awareness
+    // Schema caching with database type awareness (existing logic)
     let schemaInfo: string;
     const cachedSchema = schemaCache.get(connectionId);
 
@@ -165,17 +226,58 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Generate SQL using AI with context caching (75% cost reduction!)
+    // Get conversation history if multi-turn
+    let conversationContext = "";
+    if (sessionId && isMultiTurnAllowed) {
+      const previousMessages = await db
+        .select()
+        .from(queries)
+        .where(eq(queries.sessionId, sessionId))
+        .orderBy(desc(queries.messageIndex))
+        .limit(5); // Last 5 messages for context
+
+      if (previousMessages.length > 0) {
+        conversationContext = previousMessages
+          .reverse()
+          .map((msg) => {
+            if (msg.role === "user") {
+              return `User: ${msg.question}`;
+            } else {
+              return `Assistant: ${
+                msg.interpretation || "Query executed successfully"
+              }`;
+            }
+          })
+          .join("\n");
+      }
+    }
+
+    // Get current message index
+    const messageIndex = currentSession[0]?.messageCount || 0;
+
+    // Insert user message
+    await db.insert(queries).values({
+      userId,
+      connectionId,
+      sessionId: currentSessionId,
+      role: "user",
+      messageIndex,
+      question,
+    });
+
+    // Generate SQL using gemini-multidb.ts (with context caching)
     const { generateSQL } = await import("@/lib/ai/gemini-multidb");
 
     let sql: string;
     try {
       const result = await generateSQL(
         question,
-        schemaInfo,
+        conversationContext
+          ? `${schemaInfo}\n\nPrevious conversation:\n${conversationContext}`
+          : schemaInfo,
         userPlan,
         dbType,
-        connectionId
+        connectionId // This enables context caching!
       );
       sql = result.sql;
     } catch (aiError: any) {
@@ -246,28 +348,42 @@ export async function POST(req: NextRequest) {
 
     const executionTime = Date.now() - startTime;
 
-    // Save query to history
-    await db.insert(queries).values({
-      userId: user[0].id,
-      connectionId,
-      question,
-      sqlGenerated: sql,
-      results: results.length > 0 ? results : null,
-      interpretation,
-      executionTimeMs: executionTime,
-      rowCount: results.length,
-      error,
-    });
+    // Insert assistant message
+    const assistantMessage = await db
+      .insert(queries)
+      .values({
+        userId,
+        connectionId,
+        sessionId: currentSessionId,
+        role: "assistant",
+        messageIndex: messageIndex + 1,
+        sqlGenerated: sql,
+        results: results.length > 0 ? results : null,
+        interpretation,
+        executionTimeMs: executionTime,
+        rowCount: results.length,
+        error,
+      })
+      .returning();
+
+    // Update session message count
+    await db
+      .update(chatSessions)
+      .set({
+        messageCount: messageIndex + 2,
+        updatedAt: new Date(),
+      })
+      .where(eq(chatSessions.id, currentSessionId));
 
     // Update usage tracking
     if (usage[0]) {
       await db
         .update(usageTracking)
-        .set({ queryCount: (usage[0].queryCount as number) + 1 })
+        .set({ queryCount: currentQueryCount + 1 })
         .where(eq(usageTracking.id, usage[0].id));
     } else {
       await db.insert(usageTracking).values({
-        userId: user[0].id,
+        userId,
         date: today,
         queryCount: 1,
       });
@@ -277,6 +393,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
+          sessionId: currentSessionId,
           error,
           sql,
           interpretation,
@@ -288,12 +405,16 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      sessionId: currentSessionId,
+      message: assistantMessage[0],
       sql,
       results,
       rowCount: results.length,
       executionTime,
       interpretation,
       dbType,
+      canContinue: isMultiTurnAllowed,
+      usageRemaining: limit - currentQueryCount - 1,
     });
   } catch (error: any) {
     console.error("Query error:", error);

@@ -1,153 +1,162 @@
+// components/QueryHistorySidebar.tsx
+"use client";
+
 import { useState } from "react";
-import { History, Star, Search, X, Loader2, Clock, Trash2 } from "lucide-react";
+import { Clock, Star, Trash2, Menu, X, MessageSquare } from "lucide-react";
 import { QueryHistoryItem } from "@/types/history";
+import { formatDistanceToNow } from "date-fns";
 
 interface QueryHistorySidebarProps {
-  show: boolean;
   history: QueryHistoryItem[];
   loading: boolean;
-  onClose: () => void;
-  onRerunQuery: (item: QueryHistoryItem) => void;
-  onRerunFresh: (item: QueryHistoryItem) => void;
-  onToggleFavorite: (id: string) => void;
+  showSidebar: boolean;
+  onToggleSidebar: () => void;
+  onToggleFavorite: (id: string, isFavorite: boolean) => void;
   onDeleteQuery: (id: string) => void;
+  onHistoryItemClick: (sessionId: string) => void;
 }
 
 export default function QueryHistorySidebar({
-  show,
   history,
   loading,
-  onClose,
-  onRerunQuery,
-  onRerunFresh,
+  showSidebar,
+  onToggleSidebar,
   onToggleFavorite,
   onDeleteQuery,
+  onHistoryItemClick,
 }: QueryHistorySidebarProps) {
-  const [filter, setFilter] = useState<"all" | "favorites">("all");
-  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredHistory = history
-    .filter((q) => {
-      if (filter === "favorites" && !q.isFavorite) return false;
-      if (search && !q.question.toLowerCase().includes(search.toLowerCase())) {
-        return false;
+  const filteredHistory = history.filter((item) =>
+    item.question.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Group history by session
+  const groupedHistory = filteredHistory.reduce(
+    (acc, item) => {
+      const sessionId = item.sessionId || item.id;
+      if (!acc[sessionId]) {
+        acc[sessionId] = {
+          sessionId,
+          title: item.question,
+          queries: [],
+          createdAt: new Date(item.createdAt),
+          isFavorite: item.isFavorite,
+        };
       }
-      return true;
-    })
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+      acc[sessionId].queries.push(item);
+      return acc;
+    },
+    {} as Record<
+      string,
+      {
+        sessionId: string;
+        title: string;
+        queries: QueryHistoryItem[];
+        createdAt: Date;
+        isFavorite: boolean;
+      }
+    >
+  );
 
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) return `${days}d ago`;
-    if (hours > 0) return `${hours}h ago`;
-    if (minutes > 0) return `${minutes}m ago`;
-    return "Just now";
-  };
-
-  if (!show) return null;
+  const sessions = Object.values(groupedHistory).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 
   return (
-    <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
-      <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-            <History className="h-5 w-5 mr-2" />
-            Query History
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <>
+      {/* Mobile Overlay */}
+      {showSidebar && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          onClick={onToggleSidebar}
+        />
+      )}
 
-        <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+      {/* Sidebar */}
+      <div
+        className={`${
+          showSidebar ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0 fixed md:relative z-50 h-full w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-transform duration-300`}
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+              <Clock className="h-5 w-5 mr-2 text-emerald-600" />
+              History
+            </h2>
+            <button
+              onClick={onToggleSidebar}
+              className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
           <input
             type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
             placeholder="Search queries..."
-            className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-emerald-500 focus:border-emerald-500"
           />
         </div>
 
-        <div className="flex space-x-2">
-          <button
-            onClick={() => setFilter("all")}
-            className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              filter === "all"
-                ? "bg-emerald-600 text-white"
-                : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-            }`}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setFilter("favorites")}
-            className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center ${
-              filter === "favorites"
-                ? "bg-emerald-600 text-white"
-                : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-            }`}
-          >
-            <Star className="h-3.5 w-3.5 mr-1" />
-            Favorites
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
-          </div>
-        ) : filteredHistory.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">
-              {filter === "favorites"
-                ? "No favorite queries yet"
-                : search
-                ? "No matching queries"
-                : "No queries yet"}
-            </p>
-          </div>
-        ) : (
-          filteredHistory.map((item) => (
-            <div
-              key={item.id}
-              className="group relative p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 transition-all"
-            >
+        {/* History List */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
+            </div>
+          ) : sessions.length === 0 ? (
+            <div className="text-center py-8">
+              <Clock className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {searchQuery ? "No queries found" : "No query history yet"}
+              </p>
+            </div>
+          ) : (
+            sessions.map((session) => (
               <div
-                className="cursor-pointer"
-                onClick={() => onRerunQuery(item)}
+                key={session.sessionId}
+                className="group relative bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                onClick={() => onHistoryItemClick(session.sessionId)}
               >
                 <div className="flex items-start justify-between mb-2">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 flex-1">
-                    {item.question}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {session.title.length > 50
+                        ? session.title.substring(0, 50) + "..."
+                        : session.title}
+                    </p>
+                    <div className="flex items-center mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      <MessageSquare className="h-3 w-3 mr-1" />
+                      <span>
+                        {session.queries.length}{" "}
+                        {session.queries.length === 1 ? "message" : "messages"}
+                      </span>
+                      <span className="mx-2">•</span>
+                      <span>
+                        {formatDistanceToNow(new Date(session.createdAt), {
+                          addSuffix: true,
+                        })}
+                      </span>
+                    </div>
+                  </div>
                   <div className="flex items-center space-x-1 ml-2">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onToggleFavorite(item.id);
+                        onToggleFavorite(
+                          session.queries[0].id,
+                          !session.isFavorite
+                        );
                       }}
-                      className="p-1 hover:bg-yellow-100 dark:hover:bg-yellow-900/20 rounded transition-colors"
+                      className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <Star
-                        className={`h-3.5 w-3.5 ${
-                          item.isFavorite
+                        className={`h-4 w-4 ${
+                          session.isFavorite
                             ? "fill-yellow-400 text-yellow-400"
                             : "text-gray-400"
                         }`}
@@ -156,41 +165,32 @@ export default function QueryHistorySidebar({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onDeleteQuery(item.id);
+                        if (
+                          confirm(
+                            "Delete this session? This will remove all messages in this conversation."
+                          )
+                        ) {
+                          onDeleteQuery(session.queries[0].id);
+                        }
                       }}
-                      className="p-1 hover:bg-red-100 dark:hover:bg-red-900/20 rounded transition-colors opacity-0 group-hover:opacity-100"
+                      className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                     >
-                      <Trash2 className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                      <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
                     </button>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                  <span className="flex items-center">
-                    <Clock className="h-3 w-3 mr-1" />
-                    {formatTime(item.createdAt)}
-                  </span>
-                  {item.rowCount !== undefined && (
-                    <span>{item.rowCount} rows</span>
-                  )}
-                </div>
+                {/* Show snippet of first query */}
+                {session.queries[0].interpretation && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
+                    {session.queries[0].interpretation}
+                  </p>
+                )}
               </div>
-
-              {item.results && item.results.length > 0 && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRerunFresh(item);
-                  }}
-                  className="mt-2 w-full px-2 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 rounded transition-colors opacity-0 group-hover:opacity-100"
-                >
-                  🔄 Re-run Query (Get Fresh Data)
-                </button>
-              )}
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
