@@ -5,7 +5,10 @@ interface ResultsTableProps {
   onExport: () => void;
 }
 
-export default function ResultsTable({ results, onExport }: Readonly<ResultsTableProps>) {
+export default function ResultsTable({
+  results,
+  onExport,
+}: Readonly<ResultsTableProps>) {
   if (!results || results.length === 0) return null;
 
   const headers = Object.keys(results[0]);
@@ -31,7 +34,7 @@ export default function ResultsTable({ results, onExport }: Readonly<ResultsTabl
                   key={key}
                   className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                 >
-                  {key}
+                  {String(key).split("_").join(" ")}
                 </th>
               ))}
             </tr>

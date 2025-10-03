@@ -16,6 +16,8 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import DeepAnalysisButton from "./DeepAnalysisButton";
 import DataVisualization from "./DataVisualization";
+import { ExportUtils } from "@/lib/exportUtils";
+import ResultsTable from "./ResultsTable";
 
 interface ChatMessageProps {
   message: ChatMessage;
@@ -111,6 +113,15 @@ export default function ChatMessageComponent({
                 Query returned {metadata.rowCount} rows
               </span>
             </div>
+            <ResultsTable
+              results={metadata.results}
+              onExport={() =>
+                ExportUtils.downloadCSV(
+                  metadata.results as any[],
+                  "query-results"
+                )
+              }
+            />
           </div>
         )}
 
