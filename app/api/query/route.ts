@@ -89,8 +89,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Daily query limit reached (${limit} queries). Upgrade your plan for more queries.`,
+          error: `Daily query limit reached (${limit} queries). Upgrade to increase your limit.`,
           limitReached: true,
+          currentUsage: currentQueryCount,
+          limit,
         },
         { status: 429 }
       );
@@ -125,8 +127,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: "Multi-turn conversations require Growth plan or higher",
+            error:
+              "Multi-turn conversations require Growth plan or higher. Please upgrade to continue this conversation.",
             upgradeRequired: true,
+            requiredPlan: "growth",
           },
           { status: 403 }
         );
@@ -243,9 +247,7 @@ export async function POST(req: NextRequest) {
             if (msg.role === "user") {
               return `User: ${msg.question}`;
             } else {
-              return `Assistant: ${
-                msg.interpretation || "Query executed successfully"
-              }`;
+              return `Assistant: ${msg.interpretation}\nSQL: ${msg.sqlGenerated}`;
             }
           })
           .join("\n");

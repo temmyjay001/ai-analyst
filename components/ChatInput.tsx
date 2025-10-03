@@ -7,6 +7,7 @@ interface ChatInputProps {
   onInputChange: (value: string) => void;
   onSubmit: (e: FormEvent) => void;
   disabled?: boolean;
+  placeholder?: string;
 }
 
 export default function ChatInput({
@@ -15,6 +16,7 @@ export default function ChatInput({
   onInputChange,
   onSubmit,
   disabled = false,
+  placeholder = "Ask a question about your database...",
 }: ChatInputProps) {
   return (
     <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
@@ -24,7 +26,7 @@ export default function ChatInput({
             type="text"
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
-            placeholder="Ask a question about your data..."
+            placeholder={placeholder}
             disabled={loading || disabled}
             className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-emerald-500 focus:border-emerald-500 disabled:opacity-50"
           />

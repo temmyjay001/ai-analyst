@@ -11,7 +11,7 @@ interface EmptyStateProps {
   onSelectQuery: (query: string) => void;
 }
 
-export default function EmptyState({ onSelectQuery }: EmptyStateProps) {
+export default function EmptyState({ onSelectQuery }: Readonly<EmptyStateProps>) {
   return (
     <div className="text-center py-12">
       <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-100 dark:bg-emerald-900 rounded-full mb-4">
