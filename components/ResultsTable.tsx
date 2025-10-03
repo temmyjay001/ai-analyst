@@ -5,7 +5,7 @@ interface ResultsTableProps {
   onExport: () => void;
 }
 
-export default function ResultsTable({ results, onExport }: ResultsTableProps) {
+export default function ResultsTable({ results, onExport }: Readonly<ResultsTableProps>) {
   if (!results || results.length === 0) return null;
 
   const headers = Object.keys(results[0]);

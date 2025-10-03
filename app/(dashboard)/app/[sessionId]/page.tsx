@@ -1,5 +1,8 @@
 // app/(dashboard)/app/[sessionId]/page.tsx
-import ChatContent from "@/components/ChatContent";
+"use client";
+
+import { use } from "react";
+import ChatInterface from "@/components/ChatInterface";
 
 interface SessionPageProps {
   params: Promise<{
@@ -7,7 +10,7 @@ interface SessionPageProps {
   }>;
 }
 
-export default async function SessionPage({ params }: SessionPageProps) {
-  const { sessionId } = await params;
-  return <ChatContent sessionId={sessionId} />;
+export default function SessionPage({ params }: SessionPageProps) {
+  const { sessionId } = use(params);
+  return <ChatInterface sessionId={sessionId} />;
 }

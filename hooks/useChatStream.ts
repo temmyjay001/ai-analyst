@@ -1,0 +1,145 @@
+// hooks/useChatStream.ts
+
+import { useState, useCallback } from "react";
+import { ChatMessage, SSEEvent, StreamStatus } from "@/types/chat";
+
+interface UseChatStreamOptions {
+  onComplete?: (data: any) => void;
+  onError?: (error: string) => void;
+}
+
+export function useChatStream(options: UseChatStreamOptions = {}) {
+  const [streaming, setStreaming] = useState(false);
+  const [status, setStatus] = useState<StreamStatus | null>(null);
+  const [sqlChunks, setSqlChunks] = useState<string[]>([]);
+  const [interpretationChunks, setInterpretationChunks] = useState<string[]>(
+    []
+  );
+  const [results, setResults] = useState<any[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const streamChat = useCallback(
+    async (question: string, connectionId: string, sessionId?: string) => {
+      setStreaming(true);
+      setStatus(null);
+      setSqlChunks([]);
+      setInterpretationChunks([]);
+      setResults(null);
+      setError(null);
+
+      try {
+        const response = await fetch("/api/chat/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, connectionId, sessionId }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to start stream");
+        }
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+
+        if (!reader) {
+          throw new Error("No response body");
+        }
+
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+
+            const eventMatch = line.match(/^event: (.+)$/m);
+            const dataMatch = line.match(/^data: (.+)$/m);
+
+            if (eventMatch && dataMatch) {
+              const eventType = eventMatch[1];
+              const data = JSON.parse(dataMatch[1]);
+
+              handleSSEEvent(eventType, data);
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error("Stream error:", err);
+        setError(err.message);
+        options.onError?.(err.message);
+      } finally {
+        setStreaming(false);
+      }
+    },
+    [options]
+  );
+
+  const handleSSEEvent = useCallback(
+    (eventType: string, data: any) => {
+      switch (eventType) {
+        case "status":
+          setStatus(data);
+          break;
+
+        case "session_created":
+          // Handle new session creation
+          break;
+
+        case "user_message":
+          // User message saved
+          break;
+
+        case "sql_chunk":
+          setSqlChunks((prev) => [...prev, data.chunk]);
+          break;
+
+        case "sql_generated":
+          // SQL generation complete
+          break;
+
+        case "results":
+          setResults(data.results);
+          break;
+
+        case "interpretation_start":
+          setInterpretationChunks([]);
+          break;
+
+        case "interpretation_chunk":
+          setInterpretationChunks((prev) => [...prev, data.chunk]);
+          break;
+
+        case "interpretation_complete":
+          // Interpretation complete
+          break;
+
+        case "complete":
+          options.onComplete?.(data);
+          break;
+
+        case "error":
+          setError(data.message);
+          options.onError?.(data.message);
+          break;
+      }
+    },
+    [options]
+  );
+
+  return {
+    streaming,
+    status,
+    sql: sqlChunks.join(""),
+    interpretation: interpretationChunks.join(""),
+    results,
+    error,
+    streamChat,
+  };
+}

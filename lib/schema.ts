@@ -9,6 +9,8 @@ import {
   integer,
   jsonb,
   date,
+  index,
+  pgEnum,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -82,51 +84,6 @@ export const databaseConnections = pgTable("database_connections", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// NEW: Chat Sessions table
-export const chatSessions = pgTable("chat_sessions", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  connectionId: uuid("connection_id")
-    .notNull()
-    .references(() => databaseConnections.id, { onDelete: "cascade" }),
-  title: varchar("title", { length: 255 }).notNull(),
-  plan: varchar("plan", { length: 50 }).notNull(), // Snapshot of user's plan at creation
-  isMultiTurn: boolean("is_multi_turn").notNull().default(false), // false for Free/Starter, true for Growth+
-  messageCount: integer("message_count").default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-// MODIFIED: Queries table with session support
-export const queries = pgTable("queries", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  connectionId: uuid("connection_id")
-    .notNull()
-    .references(() => databaseConnections.id, { onDelete: "cascade" }),
-  sessionId: uuid("session_id")
-    .notNull()
-    .references(() => chatSessions.id, { onDelete: "cascade" }),
-  role: varchar("role", { length: 50 }).notNull(), // 'user' or 'assistant'
-  messageIndex: integer("message_index").notNull().default(0), // Order within session
-  question: text("question"), // Only for user messages
-  sqlGenerated: text("sql_generated"), // Only for assistant messages
-  results: jsonb("results"), // Only for assistant messages
-  interpretation: text("interpretation"), // Only for assistant messages
-  executionTimeMs: integer("execution_time_ms"),
-  rowCount: integer("row_count"),
-  isFavorite: boolean("is_favorite").default(false),
-  isShared: boolean("is_shared").default(false),
-  error: text("error"),
-  fromCache: boolean("from_cache").default(false),
-  cacheKey: varchar("cache_key", { length: 255 }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
 // Subscriptions
 export const subscriptions = pgTable("subscriptions", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -159,45 +116,96 @@ export const usageTracking = pgTable("usage_tracking", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Relations
+// ============================================
+// CHAT SESSIONS
+// ============================================
+export const chatSessions = pgTable("chat_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  connectionId: uuid("connection_id")
+    .references(() => databaseConnections.id, { onDelete: "cascade" })
+    .notNull(),
+  
+  title: varchar("title", { length: 500 }).notNull(), // From first user message
+  messageCount: integer("message_count").default(0).notNull(), // Track for limits
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index("idx_sessions_user_updated").on(table.userId, table.updatedAt),
+  connectionIdx: index("idx_sessions_connection").on(table.connectionId),
+}));
+
+// ============================================
+// CHAT MESSAGES
+// ============================================
+export const messageRoleEnum = pgEnum("message_role", ["user", "assistant", "system"]);
+
+export const chatMessages = pgTable("chat_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sessionId: uuid("session_id")
+    .references(() => chatSessions.id, { onDelete: "cascade" })
+    .notNull(),
+  
+  role: messageRoleEnum("role").notNull(),
+  content: text("content").notNull(), // User question OR assistant interpretation
+  
+  // Metadata (only for assistant messages)
+  metadata: jsonb("metadata").$type<{
+    sql?: string;
+    results?: any[];
+    executionTimeMs?: number;
+    rowCount?: number;
+    dbType?: string;
+    error?: string;
+    fromCache?: boolean;
+    cacheKey?: string;
+    isDeepAnalysis?: boolean;
+    deepAnalysisSteps?: Array<{
+      stepNumber: number;
+      question: string;
+      sql: string;
+      results: any[];
+      insights: string;
+    }>;
+  }>(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  sessionIdx: index("idx_messages_session_created").on(table.sessionId, table.createdAt),
+}));
+
+// ============================================
+// RELATIONS
+// ============================================
+export const chatSessionsRelations = relations(chatSessions, ({ one, many }) => ({
+  user: one(users, {
+    fields: [chatSessions.userId],
+    references: [users.id],
+  }),
+  connection: one(databaseConnections, {
+    fields: [chatSessions.connectionId],
+    references: [databaseConnections.id],
+  }),
+  messages: many(chatMessages),
+}));
+
+export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
+  session: one(chatSessions, {
+    fields: [chatMessages.sessionId],
+    references: [chatSessions.id],
+  }),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
   sessions: many(sessions),
   connections: many(databaseConnections),
   chatSessions: many(chatSessions),
-  queries: many(queries),
-  subscription: many(subscriptions),
+  subscriptions: many(subscriptions),
   usage: many(usageTracking),
-}));
-
-export const chatSessionsRelations = relations(
-  chatSessions,
-  ({ one, many }) => ({
-    user: one(users, {
-      fields: [chatSessions.userId],
-      references: [users.id],
-    }),
-    connection: one(databaseConnections, {
-      fields: [chatSessions.connectionId],
-      references: [databaseConnections.id],
-    }),
-    queries: many(queries),
-  })
-);
-
-export const queriesRelations = relations(queries, ({ one }) => ({
-  user: one(users, {
-    fields: [queries.userId],
-    references: [users.id],
-  }),
-  connection: one(databaseConnections, {
-    fields: [queries.connectionId],
-    references: [databaseConnections.id],
-  }),
-  session: one(chatSessions, {
-    fields: [queries.sessionId],
-    references: [chatSessions.id],
-  }),
 }));
 
 export const databaseConnectionsRelations = relations(
@@ -207,7 +215,6 @@ export const databaseConnectionsRelations = relations(
       fields: [databaseConnections.userId],
       references: [users.id],
     }),
-    queries: many(queries),
     chatSessions: many(chatSessions),
   })
 );

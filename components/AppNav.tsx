@@ -20,7 +20,7 @@ export default function AppNav() {
   const plan = useUserStore((state) => state.plan);
 
   const navItems = [
-    { href: "/app", label: "Chat", icon: MessageCircle },
+    // { href: "/app", label: "Chat", icon: MessageCircle },
     { href: "/connections", label: "Connections", icon: Database },
     { href: "/billing", label: "Billing", icon: CreditCard },
     { href: "/settings", label: "Settings", icon: Settings },

@@ -1,6 +1,8 @@
 // app/(dashboard)/app/page.tsx
-import ChatContent from "@/components/ChatContent";
+"use client";
 
-export default function NewChatPage() {
-  return <ChatContent />;
+import ChatInterface from "@/components/ChatInterface";
+
+export default function ChatPage() {
+  return <ChatInterface />;
 }
