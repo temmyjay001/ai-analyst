@@ -32,6 +32,10 @@ export interface MessageMetadata {
   cacheKey?: string;
   isDeepAnalysis?: boolean;
   deepAnalysisSteps?: DeepAnalysisStep[];
+  hasPartialError?: boolean;
+  canRetry?: boolean;
+  retryOf?: string;
+  retryCount?: number;
 }
 
 export interface DeepAnalysisStep {
@@ -48,6 +52,13 @@ export type SSEEventType =
   | "sql_generated"
   | "sql_executing"
   | "results"
+  | "follow_ups_generated"
+  | "step_start"
+  | "step_complete"
+  | "step_progress"
+  | "comprehensive_insights_start"
+  | "comprehensive_insights_chunk"
+  | "comprehensive_insights_complete"
   | "interpretation_start"
   | "interpretation_chunk"
   | "interpretation_complete"
@@ -69,4 +80,18 @@ export interface StreamStatus {
     | "complete"
     | "error";
   message: string;
+}
+
+export interface StreamError {
+  message: string;
+  upgradeRequired?: boolean;
+  requiredPlan?: "starter" | "growth" | "enterprise";
+  limitReached?: boolean;
+  currentUsage?: number;
+  limit?: number;
+  queriesNeeded?: number;
+  queriesAvailable?: number;
+  partial?: boolean;
+  canRetry?: boolean;
+  sql?: string;
 }

@@ -18,17 +18,21 @@ import DeepAnalysisButton from "./DeepAnalysisButton";
 import DataVisualization from "./DataVisualization";
 import { ExportUtils } from "@/lib/exportUtils";
 import ResultsTable from "./ResultsTable";
+import RetryButton from "./RetryButton";
 
 interface ChatMessageProps {
   message: ChatMessage;
   onDeepAnalysis?: () => void;
+  onRetrySuccess?: (newMessage: ChatMessage) => void;
 }
 
 export default function ChatMessageComponent({
   message,
   onDeepAnalysis,
+  onRetrySuccess,
 }: Readonly<ChatMessageProps>) {
   const [copied, setCopied] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   const handleCopy = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -54,6 +58,7 @@ export default function ChatMessageComponent({
   // Assistant message
   const metadata = message.metadata;
   const hasError = metadata?.error;
+  const canRetry = metadata?.canRetry && metadata?.hasPartialError;
 
   return (
     <div className="flex items-start gap-3 mb-6">
@@ -73,6 +78,11 @@ export default function ChatMessageComponent({
                 {metadata.fromCache && (
                   <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-full">
                     Cached
+                  </span>
+                )}
+                {metadata.retryOf && (
+                  <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-full">
+                    Retry #{metadata.retryCount || 1}
                   </span>
                 )}
               </div>
@@ -96,6 +106,50 @@ export default function ChatMessageComponent({
                 rows
               </p>
             )}
+          </div>
+        )}
+
+        {hasError && (
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-800">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-red-900 dark:text-red-100 mb-1">
+                  Query Execution Error
+                </p>
+                <p className="text-sm text-red-700 dark:text-red-300 mb-3">
+                  {metadata.error}
+                </p>
+
+                {/* Retry Button */}
+                {canRetry && onRetrySuccess && (
+                  <div className="space-y-2">
+                    <RetryButton
+                      messageId={message.id}
+                      onSuccess={(newMessage) => {
+                        onRetrySuccess(newMessage);
+                        setRetryError(null);
+                      }}
+                      onError={setRetryError}
+                    />
+                    {retryError && (
+                      <p className="text-xs text-red-600 dark:text-red-400">
+                        {retryError}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {!canRetry &&
+                  metadata.retryCount &&
+                  metadata.retryCount > 0 && (
+                    <p className="text-xs text-red-600 dark:text-red-400 italic">
+                      This query has already been retried. Please try rephrasing
+                      your question.
+                    </p>
+                  )}
+              </div>
+            </div>
           </div>
         )}
 

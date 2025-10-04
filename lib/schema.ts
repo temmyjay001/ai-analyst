@@ -119,78 +119,103 @@ export const usageTracking = pgTable("usage_tracking", {
 // ============================================
 // CHAT SESSIONS
 // ============================================
-export const chatSessions = pgTable("chat_sessions", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id")
-    .references(() => users.id, { onDelete: "cascade" })
-    .notNull(),
-  connectionId: uuid("connection_id")
-    .references(() => databaseConnections.id, { onDelete: "cascade" })
-    .notNull(),
-  
-  title: varchar("title", { length: 500 }).notNull(), // From first user message
-  messageCount: integer("message_count").default(0).notNull(), // Track for limits
-  
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  userIdx: index("idx_sessions_user_updated").on(table.userId, table.updatedAt),
-  connectionIdx: index("idx_sessions_connection").on(table.connectionId),
-}));
+export const chatSessions = pgTable(
+  "chat_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    connectionId: uuid("connection_id")
+      .references(() => databaseConnections.id, { onDelete: "cascade" })
+      .notNull(),
+
+    title: varchar("title", { length: 500 }).notNull(), // From first user message
+    messageCount: integer("message_count").default(0).notNull(), // Track for limits
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index("idx_sessions_user_updated").on(
+      table.userId,
+      table.updatedAt
+    ),
+    connectionIdx: index("idx_sessions_connection").on(table.connectionId),
+  })
+);
 
 // ============================================
 // CHAT MESSAGES
 // ============================================
-export const messageRoleEnum = pgEnum("message_role", ["user", "assistant", "system"]);
+export const messageRoleEnum = pgEnum("message_role", [
+  "user",
+  "assistant",
+  "system",
+]);
 
-export const chatMessages = pgTable("chat_messages", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  sessionId: uuid("session_id")
-    .references(() => chatSessions.id, { onDelete: "cascade" })
-    .notNull(),
-  
-  role: messageRoleEnum("role").notNull(),
-  content: text("content").notNull(), // User question OR assistant interpretation
-  
-  // Metadata (only for assistant messages)
-  metadata: jsonb("metadata").$type<{
-    sql?: string;
-    results?: any[];
-    executionTimeMs?: number;
-    rowCount?: number;
-    dbType?: string;
-    error?: string;
-    fromCache?: boolean;
-    cacheKey?: string;
-    isDeepAnalysis?: boolean;
-    deepAnalysisSteps?: Array<{
-      stepNumber: number;
-      question: string;
-      sql: string;
-      results: any[];
-      insights: string;
-    }>;
-  }>(),
-  
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  sessionIdx: index("idx_messages_session_created").on(table.sessionId, table.createdAt),
-}));
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .references(() => chatSessions.id, { onDelete: "cascade" })
+      .notNull(),
+
+    role: messageRoleEnum("role").notNull(),
+    content: text("content").notNull(), // User question OR assistant interpretation
+
+    // Metadata (only for assistant messages)
+    metadata: jsonb("metadata").$type<{
+      sql?: string;
+      results?: any[];
+      executionTimeMs?: number;
+      rowCount?: number;
+      dbType?: string;
+      error?: string;
+      fromCache?: boolean;
+      cacheKey?: string;
+      isDeepAnalysis?: boolean;
+      deepAnalysisSteps?: Array<{
+        stepNumber: number;
+        question: string;
+        sql: string;
+        results: any[];
+        insights: string;
+      }>;
+      hasPartialError?: boolean;
+      canRetry?: boolean;
+      retryOf?: string;
+      retryCount?: number;
+    }>(),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    sessionIdx: index("idx_messages_session_created").on(
+      table.sessionId,
+      table.createdAt
+    ),
+  })
+);
 
 // ============================================
 // RELATIONS
 // ============================================
-export const chatSessionsRelations = relations(chatSessions, ({ one, many }) => ({
-  user: one(users, {
-    fields: [chatSessions.userId],
-    references: [users.id],
-  }),
-  connection: one(databaseConnections, {
-    fields: [chatSessions.connectionId],
-    references: [databaseConnections.id],
-  }),
-  messages: many(chatMessages),
-}));
+export const chatSessionsRelations = relations(
+  chatSessions,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [chatSessions.userId],
+      references: [users.id],
+    }),
+    connection: one(databaseConnections, {
+      fields: [chatSessions.connectionId],
+      references: [databaseConnections.id],
+    }),
+    messages: many(chatMessages),
+  })
+);
 
 export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
   session: one(chatSessions, {

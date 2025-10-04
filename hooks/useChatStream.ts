@@ -1,11 +1,11 @@
 // hooks/useChatStream.ts
 
 import { useState, useCallback } from "react";
-import { ChatMessage, SSEEvent, StreamStatus } from "@/types/chat";
+import { ChatMessage, StreamError, StreamStatus } from "@/types/chat";
 
 interface UseChatStreamOptions {
   onComplete?: (data: any) => void;
-  onError?: (error: string) => void;
+  onError?: (error: StreamError) => void;
 }
 
 export function useChatStream(options: UseChatStreamOptions = {}) {
@@ -16,7 +16,8 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
     []
   );
   const [results, setResults] = useState<any[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<StreamError | null>(null);
+  const [showError, setShowError] = useState(false);
 
   const streamChat = useCallback(
     async (question: string, connectionId: string, sessionId?: string) => {
@@ -26,6 +27,7 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
       setInterpretationChunks([]);
       setResults(null);
       setError(null);
+      setShowError(false);
 
       try {
         const response = await fetch("/api/chat/stream", {
@@ -72,7 +74,13 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
         }
       } catch (err: any) {
         console.error("Stream error:", err);
-        setError(err.message);
+        const streamError: StreamError =
+          typeof err === "object" && err.message
+            ? err
+            : { message: String(err) };
+
+        setError(streamError);
+        setShowError(true);
         options.onError?.(err.message);
       } finally {
         setStreaming(false);
@@ -120,18 +128,31 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
           // Interpretation complete
           break;
 
+        case "cached_result":
+          setSqlChunks([data.sql]);
+          setInterpretationChunks([data.interpretation]);
+          setResults(data.results);
+          break;
+
         case "complete":
           options.onComplete?.(data);
           break;
 
         case "error":
-          setError(data.message);
-          options.onError?.(data.message);
+          setError(data as StreamError);
+          setShowError(true);
+          setStreaming(false);
+          options.onError?.(data as StreamError);
           break;
       }
     },
     [options]
   );
+
+  const clearError = useCallback(() => {
+    setError(null);
+    setShowError(false);
+  }, []);
 
   return {
     streaming,
@@ -140,6 +161,8 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
     interpretation: interpretationChunks.join(""),
     results,
     error,
+    showError,
     streamChat,
+    clearError,
   };
 }

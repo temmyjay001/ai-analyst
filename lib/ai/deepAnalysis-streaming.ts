@@ -7,6 +7,7 @@ import { getSchemaContext } from "@/lib/database/schemaIntrospection";
 import { db } from "@/lib/db";
 import { databaseConnections } from "@/lib/schema";
 import { eq } from "drizzle-orm";
+import { validateAndCleanSQL } from "../utils/sql";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -80,13 +81,23 @@ export async function* executeDeepAnalysisStreaming(
       };
 
       try {
+        // Clean and validate SQL
+        let cleanedSQL: string;
+        try {
+          cleanedSQL = validateAndCleanSQL(query.sql);
+        } catch (validationError: any) {
+          throw new Error(
+            `Invalid SQL in follow-up ${stepNumber}: ${validationError.message}`
+          );
+        }
+
         // Execute the query
         yield {
           type: "step_progress",
           data: { message: `Executing query ${stepNumber}...` },
         };
 
-        const queryResult = await executeQuery(dbConfig, query.sql);
+        const queryResult = await executeQuery(dbConfig, cleanedSQL);
 
         yield {
           type: "step_progress",
@@ -95,7 +106,7 @@ export async function* executeDeepAnalysisStreaming(
 
         // Analyze results
         const insights = await analyzeFollowUpResults(
-          query,
+          { ...query, sql: cleanedSQL },
           queryResult.rows,
           stepNumber,
           userPlan
@@ -105,7 +116,7 @@ export async function* executeDeepAnalysisStreaming(
           stepNumber,
           question: query.question,
           purpose: query.purpose,
-          sql: query.sql,
+          sql: cleanedSQL,
           results: queryResult.rows,
           insights,
         };

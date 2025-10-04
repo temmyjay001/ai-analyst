@@ -24,6 +24,7 @@ import {
   getCachedResult,
   setCachedResult,
 } from "@/lib/cache/redis-cache";
+import { validateAndCleanSQL } from "@/lib/utils/sql";
 
 // Plan limits
 const PLAN_LIMITS = {
@@ -413,6 +414,19 @@ export async function POST(req: NextRequest) {
             send("sql_chunk", { chunk });
           }
 
+          // CLEAN AND VALIDATE SQL BEFORE SENDING
+          let cleanedSQL: string;
+          try {
+            cleanedSQL = validateAndCleanSQL(sql);
+          } catch (validationError: any) {
+            send("error", {
+              message: validationError.message,
+              partial: false,
+            });
+            controller.close();
+            return;
+          }
+
           send("sql_generated", { sql });
 
           // ==========================================
@@ -425,12 +439,12 @@ export async function POST(req: NextRequest) {
 
           const startTime = Date.now();
           let results: any[] = [];
-          let error: string | null = null;
+          let executionError: string | null = null;
 
           try {
             const queryResult = await executeQuery(
               dbConfig as ConnectionConfig,
-              sql
+              cleanedSQL
             );
             results = queryResult.rows;
             send("results", {
@@ -439,18 +453,73 @@ export async function POST(req: NextRequest) {
               executionTimeMs: Date.now() - startTime,
             });
           } catch (err: any) {
-            error = err.message;
+            executionError = err.message;
+
+            const partialMessage = await db
+              .insert(chatMessages)
+              .values({
+                sessionId: currentSessionId,
+                role: "assistant",
+                content: `Query execution failed: ${executionError}`,
+                metadata: {
+                  sql: cleanedSQL,
+                  results: undefined,
+                  executionTimeMs: Date.now() - startTime,
+                  rowCount: 0,
+                  dbType,
+                  error: executionError as string,
+                  fromCache: false,
+                  hasPartialError: true,
+                  canRetry: true,
+                },
+              })
+              .returning();
+
+            // Update session message count
+            await db
+              .update(chatSessions)
+              .set({
+                messageCount: (currentSession[0]?.messageCount || 0) + 2,
+                updatedAt: new Date(),
+              })
+              .where(eq(chatSessions.id, currentSessionId));
+
+            // Update usage tracking (user still used a query)
+            if (usage[0]) {
+              await db
+                .update(usageTracking)
+                .set({ queryCount: currentQueryCount + 1 })
+                .where(eq(usageTracking.id, usage[0].id));
+            } else {
+              await db.insert(usageTracking).values({
+                userId,
+                date: today,
+                queryCount: 1,
+              });
+            }
+
             send("error", {
-              message: `Query execution failed: ${error}`,
-              sql,
+              message: `Query execution failed: ${executionError}`,
+              sql: cleanedSQL,
               partial: true,
+              canRetry: true,
             });
+
+            send("complete", {
+              sessionId: currentSessionId,
+              message: partialMessage[0],
+              canContinue: isMultiTurnAllowed,
+              usageRemaining: limit - currentQueryCount - 1,
+            });
+
+            controller.close();
+            return;
           }
 
           // ==========================================
           // 6. INTERPRET RESULTS (STREAMING)
           // ==========================================
-          if (!error) {
+          if (!executionError) {
             send("status", {
               stage: "interpreting",
               message: "Interpreting results...",
@@ -461,7 +530,7 @@ export async function POST(req: NextRequest) {
             let interpretation = "";
             for await (const chunk of streamInterpretation(
               question,
-              sql,
+              cleanedSQL,
               results,
               dbType,
               userPlan
@@ -480,8 +549,8 @@ export async function POST(req: NextRequest) {
                 role: "assistant",
                 content: interpretation,
                 metadata: {
-                  sql,
-                  results: results.slice(0, 100),
+                  sql: cleanedSQL,
+                  results: results.slice(0, 100), // Store only first 100 rows
                   executionTimeMs: Date.now() - startTime,
                   rowCount: results.length,
                   dbType,
@@ -518,7 +587,7 @@ export async function POST(req: NextRequest) {
             // ==========================================
             try {
               await setCachedResult(cacheKey, {
-                sql,
+                sql: cleanedSQL,
                 results,
                 interpretation,
                 executionTimeMs: Date.now() - startTime,

@@ -2,9 +2,9 @@
 
 "use client";
 
-import { useState, useEffect, useRef, FormEvent } from "react";
+import { useState, useEffect, useRef, FormEvent, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Send, Brain } from "lucide-react";
+import { Loader2, Send, Brain, X, Crown } from "lucide-react";
 import { useChatStream } from "@/hooks/useChatStream";
 import { useDeepAnalysisStream } from "@/hooks/useDeepAnalysisStream";
 import ChatMessageComponent from "./ChatMessage";
@@ -34,17 +34,37 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     interpretation,
     results,
     error: streamError,
+    showError,
     streamChat,
+    clearError,
   } = useChatStream({
     onComplete: (data) => {
       // Navigate to new session if created
       if (!sessionId && data.sessionId) {
         router.push(`/app/${data.sessionId}`);
+        return;
       }
-      // Reload messages
-      if (data.sessionId) {
-        loadSession(data.sessionId);
+
+      // For existing sessions, just add the message to state
+      if (data.message && sessionId) {
+        setMessages((prev) => [...prev, data.message]);
+
+        // Update session message count locally
+        if (session) {
+          setSession({
+            ...session,
+            messageCount: (session.messageCount || 0) + 2,
+            updatedAt: new Date(),
+          });
+        }
       }
+
+      // Trigger sidebar refresh (without reloading messages)
+      window.dispatchEvent(
+        new CustomEvent("session-updated", {
+          detail: { sessionId: data.sessionId },
+        })
+      );
     },
     onError: (error) => {
       console.error("Stream error:", error);
@@ -58,12 +78,20 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     steps: deepSteps,
     status: deepStatus,
     error: deepError,
+    showError: showDeepError,
+    clearError: clearDeepError,
     streamDeepAnalysis,
   } = useDeepAnalysisStream({
     onComplete: () => {
-      // Reload session after deep analysis
+      window.dispatchEvent(
+        new CustomEvent("session-updated", {
+          detail: { sessionId },
+        })
+      );
+
+      // Optionally reload messages to show deep analysis results
       if (sessionId) {
-        loadSession(sessionId);
+        loadSessionMessages(sessionId);
       }
     },
   });
@@ -118,6 +146,18 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     }
   };
 
+  const loadSessionMessages = async (sid: string) => {
+    try {
+      const response = await fetch(`/api/sessions/${sid}`);
+      if (response.ok) {
+        const data = await response.json();
+        setMessages(data.messages);
+      }
+    } catch (error) {
+      console.error("Failed to load messages:", error);
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -131,6 +171,20 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
     const question = input.trim();
     setInput("");
+
+    // Clear any previous errors
+    clearError();
+
+    // Optimistically add user message to UI
+    const tempUserMessage: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      sessionId: sessionId || "",
+      role: "user",
+      content: question,
+      createdAt: new Date(),
+    };
+
+    setMessages((prev) => [...prev, tempUserMessage]);
 
     // Start streaming
     await streamChat(question, selectedConnection, sessionId);
@@ -151,6 +205,24 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       sessionId
     );
   };
+
+  const handleRetrySuccess = useCallback(
+    (newMessage: ChatMessage) => {
+      // Add the new successful message to the chat
+      setMessages((prev) => [...prev, newMessage]);
+
+      // Trigger sidebar update
+      window.dispatchEvent(
+        new CustomEvent("session-updated", {
+          detail: { sessionId },
+        })
+      );
+
+      // Scroll to bottom to show new message
+      scrollToBottom();
+    },
+    [sessionId]
+  );
 
   if (loadingSession) {
     return (
@@ -214,68 +286,137 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                   }
                 : undefined
             }
+            onRetrySuccess={handleRetrySuccess}
           />
         ))}
 
         {/* Streaming Message */}
-        {streaming && (
+        {(streaming || showError) && (
           <StreamingMessage
             status={status}
             sql={sql}
             interpretation={interpretation}
             results={results}
             error={streamError}
+            onDismissError={clearError}
           />
         )}
 
         {/* Deep Analysis Streaming */}
-        {deepAnalyzing && (
-          <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+        {(deepAnalyzing || showDeepError) && (
+          <div
+            className={`rounded-lg p-4 border ${
+              deepError
+                ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                : "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800"
+            }`}
+          >
             <div className="flex items-start gap-3">
-              <Brain className="h-5 w-5 text-purple-600 animate-pulse mt-0.5 flex-shrink-0" />
+              <Brain
+                className={`h-5 w-5 mt-0.5 flex-shrink-0 ${
+                  deepError ? "text-red-600" : "text-purple-600 animate-pulse"
+                }`}
+              />
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-purple-900 dark:text-purple-100 mb-2">
-                  Deep Analysis in Progress
-                </p>
-                <p className="text-sm text-purple-700 dark:text-purple-300 mb-3">
-                  {deepStatus}
-                </p>
-
-                {/* Progress Indicator */}
-                <div className="flex items-center gap-2 mb-3">
-                  {[1, 2, 3].map((step) => (
-                    <div
-                      key={step}
-                      className={`flex-1 h-2 rounded-full ${
-                        step <= currentStep
-                          ? "bg-purple-600"
-                          : "bg-purple-200 dark:bg-purple-800"
-                      }`}
-                    />
-                  ))}
-                </div>
-
-                {/* Completed Steps */}
-                {deepSteps.map((step) => (
-                  <div
-                    key={step.stepNumber}
-                    className="mb-2 p-2 bg-white dark:bg-gray-800 rounded"
-                  >
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {step.question}
+                {deepError ? (
+                  <>
+                    <p className="font-medium text-red-900 dark:text-red-100 mb-2">
+                      {deepError.upgradeRequired
+                        ? "Upgrade Required"
+                        : "Deep Analysis Failed"}
                     </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                      {step.insights}
+                    <p className="text-sm text-red-700 dark:text-red-300 mb-3">
+                      {deepError.message}
                     </p>
-                  </div>
-                ))}
 
-                {deepError && (
-                  <p className="text-sm text-red-600 dark:text-red-400 mt-2">
-                    {deepError}
-                  </p>
+                    {/* Upgrade Required */}
+                    {deepError.upgradeRequired && deepError.requiredPlan && (
+                      <div className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/30 dark:to-blue-900/30 rounded-lg p-3">
+                        <div className="flex items-start gap-2">
+                          <Crown className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-purple-900 dark:text-purple-100 mb-1">
+                              Deep Analysis is available on{" "}
+                              {deepError.requiredPlan.charAt(0).toUpperCase() +
+                                deepError.requiredPlan.slice(1)}{" "}
+                              Plan
+                            </p>
+                            <button
+                              onClick={() =>
+                                (window.location.href = "/billing")
+                              }
+                              className="text-xs font-semibold text-purple-700 dark:text-purple-300 underline hover:no-underline"
+                            >
+                              Upgrade Now →
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Insufficient Queries */}
+                    {deepError.queriesNeeded !== undefined &&
+                      deepError.queriesAvailable !== undefined && (
+                        <div className="bg-amber-100 dark:bg-amber-900/30 rounded-lg p-3">
+                          <p className="text-xs text-amber-900 dark:text-amber-100">
+                            Deep Analysis requires {deepError.queriesNeeded}{" "}
+                            queries. You have {deepError.queriesAvailable}{" "}
+                            remaining today.
+                          </p>
+                        </div>
+                      )}
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium text-purple-900 dark:text-purple-100 mb-2">
+                      Deep Analysis in Progress
+                    </p>
+                    <p className="text-sm text-purple-700 dark:text-purple-300 mb-3">
+                      {deepStatus}
+                    </p>
+
+                    {/* Progress Indicator */}
+                    <div className="flex items-center gap-2 mb-3">
+                      {[1, 2, 3].map((step) => (
+                        <div
+                          key={step}
+                          className={`flex-1 h-2 rounded-full ${
+                            step <= currentStep
+                              ? "bg-purple-600"
+                              : "bg-purple-200 dark:bg-purple-800"
+                          }`}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Completed Steps */}
+                    {deepSteps.map((step) => (
+                      <div
+                        key={step.stepNumber}
+                        className="mb-2 p-2 bg-white dark:bg-gray-800 rounded"
+                      >
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {step.question}
+                        </p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                          {step.insights}
+                        </p>
+                      </div>
+                    ))}
+                  </>
                 )}
               </div>
+
+              {/* Dismiss button for errors */}
+              {deepError && (
+                <button
+                  onClick={clearDeepError}
+                  className="p-1 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors"
+                  title="Dismiss error"
+                >
+                  <X className="h-4 w-4 text-red-600 dark:text-red-400" />
+                </button>
+              )}
             </div>
           </div>
         )}

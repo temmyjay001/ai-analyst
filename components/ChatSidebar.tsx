@@ -18,7 +18,36 @@ export default function ChatSidebar() {
 
   useEffect(() => {
     fetchSessions();
-  }, [pathname]);
+  }, []);
+
+  useEffect(() => {
+    const handleSessionUpdate = (event: CustomEvent) => {
+      const { sessionId } = event.detail;
+      // Just update the timestamp for this session
+      setSessions((prev) =>
+        prev
+          .map((s) =>
+            s.id === sessionId ? { ...s, updatedAt: new Date() } : s
+          )
+          .sort(
+            (a, b) =>
+              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          )
+      );
+    };
+
+    window.addEventListener(
+      "session-updated",
+      handleSessionUpdate as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        "session-updated",
+        handleSessionUpdate as EventListener
+      );
+    };
+  }, []);
 
   const fetchSessions = async () => {
     try {

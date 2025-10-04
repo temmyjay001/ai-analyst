@@ -1,11 +1,11 @@
 // hooks/useDeepAnalysisStream.ts
 
 import { useState, useCallback } from "react";
-import { DeepAnalysisStep } from "@/types/chat";
+import { DeepAnalysisStep, StreamError } from "@/types/chat";
 
 interface UseDeepAnalysisStreamOptions {
   onComplete?: (data: any) => void;
-  onError?: (error: string) => void;
+  onError?: (error: StreamError) => void;
 }
 
 export function useDeepAnalysisStream(
@@ -15,7 +15,8 @@ export function useDeepAnalysisStream(
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [steps, setSteps] = useState<DeepAnalysisStep[]>([]);
   const [status, setStatus] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<StreamError | null>(null);
+  const [showError, setShowError] = useState(false);
   const [comprehensiveInsights, setComprehensiveInsights] =
     useState<string>("");
 
@@ -32,6 +33,7 @@ export function useDeepAnalysisStream(
       setSteps([]);
       setStatus("");
       setError(null);
+      setShowError(false);
       setComprehensiveInsights("");
 
       try {
@@ -85,8 +87,14 @@ export function useDeepAnalysisStream(
         }
       } catch (err: any) {
         console.error("Deep analysis stream error:", err);
-        setError(err.message);
-        options.onError?.(err.message);
+        const streamError: StreamError =
+          typeof err === "object" && err.message
+            ? err
+            : { message: String(err) };
+
+        setError(streamError);
+        setShowError(true);
+        options.onError?.(streamError);
       } finally {
         setStreaming(false);
       }
@@ -135,13 +143,20 @@ export function useDeepAnalysisStream(
           break;
 
         case "error":
-          setError(data.message);
-          options.onError?.(data.message);
+          setError(data as StreamError);
+          setShowError(true);
+          setStreaming(false);
+          options.onError?.(data as StreamError);
           break;
       }
     },
     [options]
   );
+
+  const clearError = useCallback(() => {
+    setError(null);
+    setShowError(false);
+  }, []);
 
   return {
     streaming,
@@ -149,7 +164,9 @@ export function useDeepAnalysisStream(
     steps,
     status,
     error,
+    showError,
     comprehensiveInsights,
     streamDeepAnalysis,
+    clearError,
   };
 }
