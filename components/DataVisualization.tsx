@@ -18,14 +18,27 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const CustomTooltip = ({ active, payload, label, valueFormatter }: any) => {
+const CustomTooltip = ({
+  active,
+  payload,
+  label,
+  valueFormatter,
+  chartData,
+}: any) => {
   if (!active || !payload || !payload.length) return null;
 
+  const currentPoint = payload[0].payload;
+  const currentIndex = currentPoint._index;
+  const previousPoint = currentIndex > 0 ? chartData[currentIndex - 1] : null;
+
   return (
-    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-lg border-2 border-gray-200 dark:border-gray-600">
-      <p className="font-semibold text-gray-900 dark:text-white mb-2 capitalize">
-        {label}
+    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-xl border-2 border-gray-200 dark:border-gray-600">
+      {/* Date Header */}
+      <p className="font-semibold text-gray-900 dark:text-white mb-3 text-base">
+        {currentPoint._fullDate || label}
       </p>
+
+      {/* Main Data */}
       {payload.map((entry: any, index: number) => {
         const fullValue = valueFormatter
           ? valueFormatter(entry.value)
@@ -33,8 +46,19 @@ const CustomTooltip = ({ active, payload, label, valueFormatter }: any) => {
         const abbreviated = abbreviateNumber(entry.value);
         const showAbbreviation = Math.abs(entry.value) >= 1000;
 
+        // Calculate change from previous point
+        let changePercent = null;
+        let changeAbsolute = null;
+        if (previousPoint && previousPoint[entry.name] !== undefined) {
+          const prevValue = previousPoint[entry.name];
+          if (prevValue !== 0) {
+            changePercent = ((entry.value - prevValue) / prevValue) * 100;
+            changeAbsolute = entry.value - prevValue;
+          }
+        }
+
         return (
-          <div key={index} className="space-y-1">
+          <div key={index} className="space-y-2">
             <div className="flex items-center gap-2">
               <div
                 className="w-3 h-3 rounded-full flex-shrink-0"
@@ -44,16 +68,53 @@ const CustomTooltip = ({ active, payload, label, valueFormatter }: any) => {
                 {String(entry.name).split("_").join(" ")}:
               </span>
             </div>
-            <div className="ml-5 flex flex-col">
-              <span className="text-sm font-bold text-gray-900 dark:text-white">
-                {fullValue}
-              </span>
-              {showAbbreviation && (
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  ({abbreviated})
+
+            <div className="ml-5 space-y-1">
+              <div className="flex flex-col">
+                <span className="text-base font-bold text-gray-900 dark:text-white">
+                  {fullValue}
                 </span>
+                {showAbbreviation && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    ({abbreviated})
+                  </span>
+                )}
+              </div>
+
+              {/* Show change from previous point */}
+              {changePercent !== null && (
+                <div className="flex items-center gap-1 text-xs">
+                  {changePercent >= 0 ? (
+                    <>
+                      <span className="text-green-600 dark:text-green-400">
+                        ↑
+                      </span>
+                      <span className="text-green-600 dark:text-green-400 font-medium">
+                        +{changePercent.toFixed(1)}%
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-red-600 dark:text-red-400">↓</span>
+                      <span className="text-red-600 dark:text-red-400 font-medium">
+                        {changePercent.toFixed(1)}%
+                      </span>
+                    </>
+                  )}
+                  <span className="text-gray-500 dark:text-gray-400">
+                    vs previous
+                  </span>
+                </div>
               )}
             </div>
+
+            {/* Show transaction count if available */}
+            {currentPoint._originalRow?.transaction_count && (
+              <div className="ml-5 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-1 mt-1">
+                {currentPoint._originalRow.transaction_count} transaction
+                {currentPoint._originalRow.transaction_count !== 1 ? "s" : ""}
+              </div>
+            )}
           </div>
         );
       })}
@@ -354,6 +415,32 @@ const YAxisTooltipOverlay = ({
   );
 };
 
+const SmartXAxisTick = ({ x, y, payload, index, visibleTicksCount }: any) => {
+  // Calculate how many ticks to skip based on total data points
+  const tickInterval = Math.max(1, Math.ceil(visibleTicksCount / 12)); // Show ~12 labels max
+
+  // Only show every Nth tick
+  if (index % tickInterval !== 0) {
+    return null;
+  }
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0}
+        y={0}
+        dy={16}
+        textAnchor="end"
+        fill="#6B7280"
+        fontSize={11}
+        transform="rotate(-45)"
+      >
+        {payload.value}
+      </text>
+    </g>
+  );
+};
+
 const formatValue = (value: number, columnName: string) => {
   const lowerCol = columnName.toLowerCase();
 
@@ -376,21 +463,13 @@ const formatValue = (value: number, columnName: string) => {
 
 const detectVisualizationType = (data: any[]) => {
   if (!data || data.length === 0) {
-    console.log("❌ No data provided");
     return null;
   }
 
   const columns = Object.keys(data[0]);
   if (columns.length === 0) {
-    console.log("❌ No columns found");
     return null;
   }
-
-  console.log("🔍 Detection started:", {
-    columns,
-    rowCount: data.length,
-    sampleRow: data[0],
-  });
 
   const dateColumns = columns.filter((col) => {
     const colLower = col.toLowerCase();
@@ -451,12 +530,6 @@ const detectVisualizationType = (data: any[]) => {
     return isString && isNotNumeric && isNotDate;
   });
 
-  console.log("📊 Detection complete:", {
-    dateColumns,
-    numericColumns,
-    categoricalColumns,
-  });
-
   // PRIORITY 1: Time series → LINE chart
   if (dateColumns.length > 0 && numericColumns.length > 0) {
     const preferredNumeric =
@@ -472,7 +545,6 @@ const detectVisualizationType = (data: any[]) => {
         );
       }) || numericColumns[0];
 
-    console.log("✅ Using LINE chart for time series");
     return {
       type: "line",
       x: dateColumns[0],
@@ -487,7 +559,6 @@ const detectVisualizationType = (data: any[]) => {
     numericColumns.length > 0 &&
     data.length <= 20
   ) {
-    console.log("✅ Using BAR chart for categories");
     return {
       type: "bar",
       x: categoricalColumns[0],
@@ -505,7 +576,6 @@ const detectVisualizationType = (data: any[]) => {
     numericColumns.length > 0 &&
     data.length <= 10
   ) {
-    console.log("✅ Using PIE chart for distribution");
     return {
       type: "pie",
       label: categoricalColumns[0],
@@ -518,7 +588,6 @@ const detectVisualizationType = (data: any[]) => {
   if (numericColumns.length > 0 && data.length <= 20) {
     const xColumn =
       columns.find((col) => !numericColumns.includes(col)) || "index";
-    console.log("✅ Using FALLBACK bar chart");
     return {
       type: "bar",
       x: xColumn,
@@ -528,7 +597,6 @@ const detectVisualizationType = (data: any[]) => {
     };
   }
 
-  console.log("❌ No visualization possible");
   return null;
 };
 
@@ -541,6 +609,7 @@ const formatChartData = (data: any[], vizConfig: any) => {
       case "bar":
         return data.map((row, index) => {
           let xValue = row[vizConfig.x];
+          let originalDate = null;
 
           // Format dates for display
           const isDateColumn =
@@ -554,6 +623,7 @@ const formatChartData = (data: any[], vizConfig: any) => {
           if (isDateColumn && xValue) {
             const date = new Date(xValue);
             if (!isNaN(date.getTime())) {
+              originalDate = date; // Store for tooltip
               const monthNames = [
                 "Jan",
                 "Feb",
@@ -568,9 +638,27 @@ const formatChartData = (data: any[], vizConfig: any) => {
                 "Nov",
                 "Dec",
               ];
-              xValue = `${
-                monthNames[date.getUTCMonth()]
-              } ${date.getUTCFullYear()}`;
+              const dayNames = [
+                "Sun",
+                "Mon",
+                "Tue",
+                "Wed",
+                "Thu",
+                "Fri",
+                "Sat",
+              ];
+
+              // Use FULL DATE (day + month + year) to ensure unique keys
+              const day = date.getUTCDate();
+              const month = monthNames[date.getUTCMonth()];
+              const year = date.getUTCFullYear();
+              const dayOfWeek = dayNames[date.getUTCDay()];
+
+              xValue = `${month} ${day}, ${year}`;
+
+              // Store additional metadata for tooltip
+              row._fullDate = `${dayOfWeek}, ${month} ${day}, ${year}`;
+              row._timestamp = date.getTime();
             }
           }
 
@@ -578,7 +666,7 @@ const formatChartData = (data: any[], vizConfig: any) => {
           const chartPoint: any = {};
 
           // X-axis: formatted string
-          chartPoint[vizConfig.x] = String(xValue || "").slice(0, 20);
+          chartPoint[vizConfig.x] = String(xValue || "").slice(0, 30);
 
           // Y-axis: MUST be number for correct chart rendering
           const yValue = row[vizConfig.y];
@@ -590,7 +678,12 @@ const formatChartData = (data: any[], vizConfig: any) => {
             chartPoint[vizConfig.y] = parseFloat(cleaned) || 0;
           }
 
-          console.log(`📈 Point ${index}:`, chartPoint);
+          // Preserve metadata for enhanced tooltip
+          chartPoint._fullDate = row._fullDate;
+          chartPoint._timestamp = row._timestamp;
+          chartPoint._index = index;
+          chartPoint._originalRow = row;
+
           return chartPoint;
         });
 
@@ -643,16 +736,12 @@ export default function DataVisualization({
 }: Readonly<DataVisualizationProps>) {
   const vizConfig = useMemo(() => {
     const config = detectVisualizationType(data);
-    console.log("✅ Final config:", config);
     return config;
   }, [data]);
 
   const chartData = useMemo(() => {
     const formatted = formatChartData(data, vizConfig);
-    console.log("✅ Formatted data points:", formatted.length);
     if (formatted.length > 0) {
-      console.log("✅ First point:", formatted[0]);
-      console.log("✅ Last point:", formatted[formatted.length - 1]);
     }
     return formatted;
   }, [data, vizConfig]);
@@ -705,10 +794,9 @@ export default function DataVisualization({
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
               <XAxis
                 dataKey={vizConfig.x}
-                tick={{ fontSize: 11, fill: "#6B7280" }}
-                angle={-45}
-                textAnchor="end"
+                tick={<SmartXAxisTick visibleTicksCount={chartData.length} />}
                 height={100}
+                interval={0}
               />
               <YAxis
                 tick={
@@ -726,8 +814,14 @@ export default function DataVisualization({
                     valueFormatter={(value: number) =>
                       formatValue(value, vizConfig.y as string)
                     }
+                    chartData={chartData}
                   />
                 }
+                cursor={{
+                  stroke: "#3B82F6",
+                  strokeWidth: 1,
+                  strokeDasharray: "5 5",
+                }}
               />
               <Legend
                 content={
@@ -743,9 +837,19 @@ export default function DataVisualization({
                 type="monotone"
                 dataKey={vizConfig.y}
                 stroke="#3B82F6"
-                strokeWidth={2}
-                dot={{ fill: "#3B82F6", r: 4 }}
-                activeDot={{ r: 6 }}
+                strokeWidth={2.5}
+                dot={{
+                  fill: "#3B82F6",
+                  r: 3, // Smaller default dot
+                  strokeWidth: 0,
+                }}
+                activeDot={{
+                  r: 7, // Larger on hover
+                  strokeWidth: 2,
+                  stroke: "#fff",
+                  fill: "#3B82F6",
+                }}
+                connectNulls={true}
               />
             </LineChart>
           </ResponsiveContainer>
