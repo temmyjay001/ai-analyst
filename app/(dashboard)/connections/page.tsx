@@ -157,7 +157,7 @@ export default function ConnectionsPage() {
               Database Connections
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Manage connections to PostgreSQL, MySQL, SQL Server, and SQLite
+              Manage connections to PostgreSQL, MySQL, and SQL Server
             </p>
           </div>
           <button

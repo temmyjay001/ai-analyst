@@ -730,6 +730,7 @@ const COLORS = [
 
 interface DataVisualizationProps {
   data: any[];
+  savedVizConfig?: any;
   chartMetadata?: {
     question: string;
     sql: string;
@@ -741,14 +742,17 @@ interface DataVisualizationProps {
 
 export default function DataVisualization({
   data,
+  savedVizConfig,
   chartMetadata,
 }: Readonly<DataVisualizationProps>) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const vizConfig = useMemo(() => {
-    const config = detectVisualizationType(data);
-    return config;
-  }, [data]);
+    if (savedVizConfig) {
+      return savedVizConfig;
+    }
+    return detectVisualizationType(data);
+  }, [data, savedVizConfig]);
 
   const chartData = useMemo(() => {
     const formatted = formatChartData(data, vizConfig);

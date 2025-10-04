@@ -1,4 +1,6 @@
+// store/userStore.ts
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 interface UsageData {
   dailyQueries: number;
@@ -12,57 +14,87 @@ interface UserState {
   usage: UsageData | null;
   loading: boolean;
   initialized: boolean;
+  lastFetched: number | null;
   setPlan: (plan: string) => void;
   setUsage: (usage: UsageData) => void;
   setLoading: (loading: boolean) => void;
-  fetchUserData: () => Promise<void>;
+  fetchUserData: (force?: boolean) => Promise<void>;
 }
 
-export const useUserStore = create<UserState>((set, get) => ({
-  plan: "free",
-  usage: null,
-  loading: true,
-  initialized: false,
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-  setPlan: (plan) => set({ plan }),
+export const useUserStore = create<UserState>()(
+  persist(
+    (set, get) => ({
+      plan: "free",
+      usage: null,
+      loading: false,
+      initialized: false,
+      lastFetched: null,
 
-  setUsage: (usage) => set({ usage }),
+      setPlan: (plan) => set({ plan }),
 
-  setLoading: (loading) => set({ loading }),
+      setUsage: (usage) => set({ usage }),
 
-  fetchUserData: async () => {
-    if (get().initialized) return;
+      setLoading: (loading) => set({ loading }),
 
-    set({ loading: true });
+      fetchUserData: async (force = false) => {
+        const state = get();
 
-    try {
-      const [planRes, usageRes] = await Promise.all([
-        fetch("/api/user/plan"),
-        fetch("/api/usage"),
-      ]);
+        // Skip if already initialized and not forcing refresh
+        if (state.initialized && !force && state.lastFetched) {
+          const timeSinceLastFetch = Date.now() - state.lastFetched;
+          if (timeSinceLastFetch < CACHE_DURATION) {
+            console.log("Using cached user data");
+            return;
+          }
+        }
 
-      if (planRes.ok) {
-        const planData = await planRes.json();
-        set({ plan: planData.plan || "free" });
-      }
+        set({ loading: true });
 
-      if (usageRes.ok) {
-        const usageData = await usageRes.json();
-        set({
-          usage: {
-            dailyQueries: usageData.usage.dailyQueries,
-            monthlyQueries: usageData.usage.monthlyQueries,
-            dailyLimit: usageData.limits.dailyQueries,
-            monthlyLimit: usageData.limits.monthlyQueries,
-          },
-        });
-      }
+        try {
+          const [planRes, usageRes] = await Promise.all([
+            fetch("/api/user/plan"),
+            fetch("/api/usage"),
+          ]);
 
-      set({ initialized: true });
-    } catch (error) {
-      console.error("Failed to fetch user data:", error);
-    } finally {
-      set({ loading: false });
+          if (planRes.ok) {
+            const planData = await planRes.json();
+            set({ plan: planData.plan || "free" });
+          }
+
+          if (usageRes.ok) {
+            const usageData = await usageRes.json();
+            set({
+              usage: {
+                dailyQueries: usageData.usage.dailyQueries,
+                monthlyQueries: usageData.usage.monthlyQueries,
+                dailyLimit: usageData.limits.dailyQueries,
+                monthlyLimit: usageData.limits.monthlyQueries,
+              },
+            });
+          }
+
+          set({
+            initialized: true,
+            lastFetched: Date.now(),
+          });
+        } catch (error) {
+          console.error("Failed to fetch user data:", error);
+        } finally {
+          set({ loading: false });
+        }
+      },
+    }),
+    {
+      name: "user-storage", // localStorage key
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        plan: state.plan,
+        usage: state.usage,
+        initialized: state.initialized,
+        lastFetched: state.lastFetched,
+      }),
     }
-  },
-}));
+  )
+);

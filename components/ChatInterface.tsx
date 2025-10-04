@@ -266,30 +266,44 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             }}
           />
         )}
-        {messages.map((message) => (
-          <ChatMessageComponent
-            key={message.id}
-            message={message}
-            session={session ?? undefined}
-            onDeepAnalysis={
-              message.role === "assistant" && message.metadata?.results
-                ? () => {
-                    // Find previous user message
-                    const userMsg = messages.find(
-                      (m) =>
-                        m.role === "user" && m.createdAt < message.createdAt
-                    );
-                    handleDeepAnalysis(
-                      userMsg?.content || "",
-                      message.metadata!.sql!,
-                      message.metadata!.results!
-                    );
-                  }
-                : undefined
+        {messages.map((message, index) => {
+          let userQuestion = "";
+          if (message.role === "assistant") {
+            // Look backwards for the previous user message
+            for (let i = index - 1; i >= 0; i--) {
+              if (messages[i].role === "user") {
+                userQuestion = messages[i].content;
+                break;
+              }
             }
-            onRetrySuccess={handleRetrySuccess}
-          />
-        ))}
+          }
+
+          return (
+            <ChatMessageComponent
+              key={message.id}
+              message={message}
+              userQuestion={userQuestion}
+              session={session ?? undefined}
+              onDeepAnalysis={
+                message.role === "assistant" && message.metadata?.results
+                  ? () => {
+                      // Find previous user message
+                      const userMsg = messages.find(
+                        (m) =>
+                          m.role === "user" && m.createdAt < message.createdAt
+                      );
+                      handleDeepAnalysis(
+                        userMsg?.content || "",
+                        message.metadata!.sql!,
+                        message.metadata!.results!
+                      );
+                    }
+                  : undefined
+              }
+              onRetrySuccess={handleRetrySuccess}
+            />
+          );
+        })}
 
         {/* Streaming Message */}
         {(streaming || showError) && (

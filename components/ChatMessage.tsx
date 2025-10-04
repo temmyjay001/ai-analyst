@@ -23,6 +23,7 @@ import { Markdown } from "./Markdown";
 
 interface ChatMessageProps {
   message: ChatMessage;
+  userQuestion?: string;
   session?: ChatSession;
   onDeepAnalysis?: () => void;
   onRetrySuccess?: (newMessage: ChatMessage) => void;
@@ -31,6 +32,7 @@ interface ChatMessageProps {
 export default function ChatMessageComponent({
   message,
   session,
+  userQuestion,
   onDeepAnalysis,
   onRetrySuccess,
 }: Readonly<ChatMessageProps>) {
@@ -161,7 +163,7 @@ export default function ChatMessageComponent({
           <DataVisualization
             data={metadata.results}
             chartMetadata={{
-              question: message.content,
+              question: userQuestion || "Query results",
               sql: metadata.sql,
               connectionId: session?.connectionId || "",
               sessionId: message.sessionId,
