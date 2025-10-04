@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { StreamStatus, StreamError } from "@/types/chat";
 import ReactMarkdown from "react-markdown";
+import { Markdown } from "./Markdown";
 
 interface StreamingMessageProps {
   status: StreamStatus | null;
@@ -78,7 +79,7 @@ export default function StreamingMessage({
             </span>
           </div>
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown>{interpretation}</ReactMarkdown>
+            <Markdown content={interpretation} />
           </div>
           {/* Typing indicator cursor */}
           <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1" />

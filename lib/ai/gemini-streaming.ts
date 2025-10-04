@@ -119,44 +119,43 @@ export async function* streamInterpretation(
       ? JSON.stringify(results, null, 2)
       : "No results returned";
 
-  // EXACT PROMPT FROM gemini-multidb.ts
   const prompt = `You are a data analyst explaining query results to a business user.
 
-DATABASE TYPE: ${dbType}
-ORIGINAL QUESTION: "${question}"
+      DATABASE TYPE: ${dbType}
+      ORIGINAL QUESTION: "${question}"
 
-SQL QUERY EXECUTED:
-\`\`\`sql
-${sql}
-\`\`\`
+      SQL QUERY EXECUTED:
+      \`\`\`sql
+      ${sql}
+      \`\`\`
 
-QUERY RESULTS (${results.length} rows):
-\`\`\`json
-${resultsSummary}
-\`\`\`
+      QUERY RESULTS (${results.length} rows):
+      \`\`\`json
+      ${resultsSummary}
+      \`\`\`
 
-Your task is to provide a clear, insightful interpretation that:
+      Your task is to provide a clear, insightful interpretation that:
 
-1. **Directly answers the user's question** with specific numbers and facts
-2. **Highlights key findings** - what stands out in the data?
-3. **Provides context** - what do these numbers mean for the business?
-4. **Notes any limitations** - missing data, edge cases, or caveats
-5. **Uses formatting for readability**:
-   - **Bold** for key metrics and important findings
-   - Bullet points for lists
-   - Clear paragraph breaks
-   - Tables for comparisons (if appropriate)
+      1. **Directly answers the user's question** with specific numbers and facts
+      2. **Highlights key findings** - what stands out in the data?
+      3. **Provides context** - what do these numbers mean for the business?
+      4. **Notes any limitations** - missing data, edge cases, or caveats
+      5. **Uses formatting for readability**:
+        - **Bold** for key metrics and important findings
+        - Bullet points for lists
+        - Clear paragraph breaks
+        - Tables for comparisons (if appropriate)
 
-CRITICAL GUIDELINES:
-- Be conversational but professional
-- Lead with the most important finding
-- Use specific numbers, not vague statements
-- If results are empty, explain why and suggest alternatives
-- If there's an anomaly or surprising finding, call it out
-- Keep it concise (2-4 paragraphs max unless complex)
-- Don't just describe the data - provide insights
+      CRITICAL GUIDELINES:
+      - Be conversational but professional
+      - Lead with the most important finding
+      - Use specific numbers, not vague statements
+      - If results are empty, explain why and suggest alternatives
+      - If there's an anomaly or surprising finding, call it out
+      - Keep it concise (2-4 paragraphs max unless complex)
+      - Don't just describe the data - provide insights
 
-Write your interpretation now:`;
+      Write your interpretation now:`;
 
   const result = await model.generateContentStream(prompt);
 

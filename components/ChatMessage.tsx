@@ -19,6 +19,7 @@ import DataVisualization from "./DataVisualization";
 import { ExportUtils } from "@/lib/exportUtils";
 import ResultsTable from "./ResultsTable";
 import RetryButton from "./RetryButton";
+import { Markdown } from "./Markdown";
 
 interface ChatMessageProps {
   message: ChatMessage;
@@ -198,7 +199,7 @@ export default function ChatMessageComponent({
 
         {/* Interpretation */}
         <div className="prose prose-sm dark:prose-invert max-w-none">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
+          <Markdown content={message.content} />
         </div>
 
         {/* Deep Analysis Button */}
