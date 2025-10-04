@@ -36,6 +36,13 @@
       "when": 1759521855190,
       "tag": "0004_flaky_quasimodo",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1759612445490,
+      "tag": "0005_hot_squadron_sinister",
+      "breakpoints": true
     }
   ]
 }

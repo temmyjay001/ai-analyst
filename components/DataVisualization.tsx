@@ -813,7 +813,11 @@ export default function DataVisualization({
         }
       />
 
-      <div className="w-full" style={{ overflowX: "auto" }}>
+      <div
+        ref={chartContainerRef}
+        className="w-full"
+        style={{ overflowX: "auto" }}
+      >
         {vizConfig.type === "line" && (
           <ResponsiveContainer width="100%" height={500} minWidth={300}>
             <LineChart

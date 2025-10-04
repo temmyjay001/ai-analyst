@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import AppNav from "@/components/AppNav";
 import { useUserStore } from "@/store/userStore";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function DashboardLayout({
   children,
@@ -44,6 +45,7 @@ export default function DashboardLayout({
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
       <AppNav />
       {children}
+      <Toaster />
     </div>
   );
 }

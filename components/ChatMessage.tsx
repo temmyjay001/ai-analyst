@@ -2,7 +2,7 @@
 
 "use client";
 
-import { ChatMessage } from "@/types/chat";
+import { ChatMessage, ChatSession } from "@/types/chat";
 import {
   User,
   Bot,
@@ -23,12 +23,14 @@ import { Markdown } from "./Markdown";
 
 interface ChatMessageProps {
   message: ChatMessage;
+  session?: ChatSession;
   onDeepAnalysis?: () => void;
   onRetrySuccess?: (newMessage: ChatMessage) => void;
 }
 
 export default function ChatMessageComponent({
   message,
+  session,
   onDeepAnalysis,
   onRetrySuccess,
 }: Readonly<ChatMessageProps>) {
@@ -161,7 +163,7 @@ export default function ChatMessageComponent({
             chartMetadata={{
               question: message.content,
               sql: metadata.sql,
-              connectionId: message.sessionId, // We use sessionId as proxy
+              connectionId: session?.connectionId || "",
               sessionId: message.sessionId,
               messageId: message.id,
             }}

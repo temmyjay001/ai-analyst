@@ -270,6 +270,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           <ChatMessageComponent
             key={message.id}
             message={message}
+            session={session ?? undefined}
             onDeepAnalysis={
               message.role === "assistant" && message.metadata?.results
                 ? () => {
