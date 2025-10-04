@@ -27,7 +27,7 @@ interface ChatMessageProps {
 export default function ChatMessageComponent({
   message,
   onDeepAnalysis,
-}: ChatMessageProps) {
+}: Readonly<ChatMessageProps>) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async (text: string) => {

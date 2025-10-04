@@ -8,7 +8,7 @@ import { eq, and, asc } from "drizzle-orm";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -27,7 +27,7 @@ export async function GET(
       return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
-    const sessionId = params.id;
+    const sessionId = (await params).id;
 
     // Fetch chat session
     const chatSession = await db
