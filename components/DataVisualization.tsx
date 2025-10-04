@@ -1,7 +1,7 @@
 // components/DataVisualization.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useRef } from "react";
 import {
   BarChart,
   Bar,
@@ -17,6 +17,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { ChartActions } from "./ChartActions";
 
 const CustomTooltip = ({
   active,
@@ -729,11 +730,21 @@ const COLORS = [
 
 interface DataVisualizationProps {
   data: any[];
+  chartMetadata?: {
+    question: string;
+    sql: string;
+    connectionId: string;
+    sessionId?: string;
+    messageId?: string;
+  };
 }
 
 export default function DataVisualization({
   data,
+  chartMetadata,
 }: Readonly<DataVisualizationProps>) {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+
   const vizConfig = useMemo(() => {
     const config = detectVisualizationType(data);
     return config;
@@ -772,9 +783,27 @@ export default function DataVisualization({
 
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 relative">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 capitalize">
-        {vizConfig.title}
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
+          {vizConfig.title}
+        </h3>
+
+        {chartMetadata && (
+          <ChartActions
+            chartRef={chartContainerRef as React.RefObject<HTMLDivElement>}
+            chartData={{
+              title: vizConfig.title,
+              question: chartMetadata.question,
+              sql: chartMetadata.sql,
+              results: data,
+              vizConfig: vizConfig,
+              connectionId: chartMetadata.connectionId,
+              sessionId: chartMetadata.sessionId,
+              messageId: chartMetadata.messageId,
+            }}
+          />
+        )}
+      </div>
 
       <YAxisTooltipOverlay
         chartData={chartData}

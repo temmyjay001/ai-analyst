@@ -156,7 +156,16 @@ export default function ChatMessageComponent({
 
         {/* Data Visualization */}
         {metadata?.results && metadata.results.length > 0 && metadata.sql && (
-          <DataVisualization data={metadata.results} />
+          <DataVisualization
+            data={metadata.results}
+            chartMetadata={{
+              question: message.content,
+              sql: metadata.sql,
+              connectionId: message.sessionId, // We use sessionId as proxy
+              sessionId: message.sessionId,
+              messageId: message.id,
+            }}
+          />
         )}
 
         {/* Results Summary */}

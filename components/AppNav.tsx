@@ -10,6 +10,7 @@ import {
   LogOut,
   User,
   CreditCard,
+  LayoutDashboard,
 } from "lucide-react";
 import UsageDisplay from "./UsageDisplay";
 import { useUserStore } from "@/store/userStore";
@@ -18,10 +19,17 @@ export default function AppNav() {
   const { data: session } = useSession();
   const pathname = usePathname();
   const plan = useUserStore((state) => state.plan);
+  const hasStarterAccess = ["starter", "growth", "enterprise"].includes(plan);
 
   const navItems = [
     // { href: "/app", label: "Chat", icon: MessageCircle },
     { href: "/connections", label: "Connections", icon: Database },
+    {
+      href: "/dashboards",
+      label: "Dashboards",
+      icon: LayoutDashboard,
+      badge: !hasStarterAccess ? "Starter+" : null,
+    },
     { href: "/billing", label: "Billing", icon: CreditCard },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
@@ -58,6 +66,11 @@ export default function AppNav() {
                 >
                   <Icon className="h-4 w-4 mr-2" />
                   {item.label}
+                  {item.badge && (
+                    <span className="ml-2 px-1.5 py-0.5 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 rounded">
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -104,6 +117,11 @@ export default function AppNav() {
               >
                 <Icon className="h-4 w-4 mr-2" />
                 {item.label}
+                {item.badge && (
+                  <span className="ml-2 px-1.5 py-0.5 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 rounded">
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}

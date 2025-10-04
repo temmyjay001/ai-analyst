@@ -200,6 +200,71 @@ export const chatMessages = pgTable(
 );
 
 // ============================================
+// DASHBOARDS (NEW)
+// ============================================
+export const dashboards = pgTable(
+  "dashboards",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    isDefault: boolean("is_default").default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index("idx_dashboards_user").on(table.userId),
+  })
+);
+
+// ============================================
+// PINNED CHARTS (NEW)
+// ============================================
+export const pinnedCharts = pgTable(
+  "pinned_charts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    dashboardId: uuid("dashboard_id")
+      .references(() => dashboards.id, { onDelete: "cascade" })
+      .notNull(),
+
+    // Chart metadata
+    title: varchar("title", { length: 500 }).notNull(),
+    chartType: varchar("chart_type", { length: 50 }).notNull(),
+
+    // Query information
+    connectionId: uuid("connection_id")
+      .references(() => databaseConnections.id, { onDelete: "cascade" })
+      .notNull(),
+    sessionId: uuid("session_id").references(() => chatSessions.id, {
+      onDelete: "set null",
+    }),
+    messageId: uuid("message_id").references(() => chatMessages.id, {
+      onDelete: "set null",
+    }),
+    sql: text("sql").notNull(),
+    question: text("question").notNull(),
+
+    // Chart configuration & cached data
+    vizConfig: jsonb("viz_config").notNull(),
+    cachedData: jsonb("cached_data"),
+    lastRefreshedAt: timestamp("last_refreshed_at"),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    dashboardIdx: index("idx_pinned_charts_dashboard").on(table.dashboardId),
+    userIdx: index("idx_pinned_charts_user").on(table.userId),
+  })
+);
+
+// ============================================
 // RELATIONS
 // ============================================
 export const chatSessionsRelations = relations(
