@@ -1,9 +1,10 @@
-// components/ChartActions.tsx - IMPROVED WITH TOAST & BETTER UX
+// components/ChartActions.tsx - UPDATED WITH PROPER NAVIGATION
 "use client";
 
 import React, { useState } from "react";
 import { Download, Pin, Loader2, Check, Plus, X } from "lucide-react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 import { useUserStore } from "@/store/userStore";
 import {
   Select,
@@ -48,6 +49,7 @@ export function ChartActions({
   chartRef,
   chartData,
 }: Readonly<ChartActionsProps>) {
+  const router = useRouter();
   const plan = useUserStore((state) => state.plan);
   const hasAccess = ["starter", "growth", "enterprise"].includes(plan);
 
@@ -69,7 +71,7 @@ export function ChartActions({
         description: "Upgrade your plan to download charts",
         action: {
           label: "Upgrade",
-          onClick: () => (window.location.href = "/billing"),
+          onClick: () => router.push("/billing"),
         },
       });
       return;
@@ -124,7 +126,6 @@ export function ChartActions({
     }
   };
 
-
   // Fetch dashboards
   const fetchDashboards = async () => {
     setLoadingDashboards(true);
@@ -153,7 +154,7 @@ export function ChartActions({
   };
 
   // Create new dashboard
-  const createDashboard = async () => {
+  const createNewDashboard = async () => {
     if (!newDashboardName.trim()) {
       toast.error("Please enter a dashboard name");
       return;
@@ -163,18 +164,21 @@ export function ChartActions({
       const response = await fetch("/api/dashboards", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newDashboardName }),
+        body: JSON.stringify({ name: newDashboardName.trim() }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        setDashboards([...dashboards, data.dashboard]);
+        toast.success("Dashboard created successfully");
+        setDashboards((prev) => [...prev, data.dashboard]);
         setSelectedDashboard(data.dashboard.id);
-        setCreateDialogOpen(false);
         setNewDashboardName("");
-        toast.success(`Dashboard "${newDashboardName}" created`);
+        setCreateDialogOpen(false);
       } else {
-        toast.error("Failed to create dashboard");
+        const error = await response.json();
+        toast.error("Failed to create dashboard", {
+          description: error.message || "Please try again",
+        });
       }
     } catch (error) {
       console.error("Failed to create dashboard:", error);
@@ -198,11 +202,7 @@ export function ChartActions({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           dashboardId: selectedDashboard,
-          title: chartData.title,
-          chartType: chartData.vizConfig.type,
           connectionId: chartData.connectionId,
-          sessionId: chartData.sessionId,
-          messageId: chartData.messageId,
           sql: chartData.sql,
           question: chartData.question,
           vizConfig: chartData.vizConfig,
@@ -219,7 +219,7 @@ export function ChartActions({
           description: `Added to ${dashboardName}`,
           action: {
             label: "View",
-            onClick: () => (window.location.href = "/dashboards"),
+            onClick: () => router.push("/dashboards"),
           },
         });
 
@@ -248,7 +248,7 @@ export function ChartActions({
         description: "Upgrade your plan to pin charts",
         action: {
           label: "Upgrade",
-          onClick: () => (window.location.href = "/billing"),
+          onClick: () => router.push("/billing"),
         },
       });
       return;
@@ -286,7 +286,9 @@ export function ChartActions({
             size="sm"
             onClick={handlePinClick}
             className="relative"
-            title={hasAccess ? "Pin to dashboard" : "Upgrade to pin charts"}
+            title={
+              hasAccess ? "Pin to dashboard" : "Upgrade to pin to dashboard"
+            }
           >
             <Pin className="h-4 w-4" />
             {!hasAccess && (
@@ -294,108 +296,91 @@ export function ChartActions({
             )}
           </Button>
         ) : (
-          <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
-            <Select
-              value={selectedDashboard}
-              onValueChange={setSelectedDashboard}
-            >
-              <SelectTrigger className="w-[160px] h-8">
-                <SelectValue placeholder="Select dashboard" />
-              </SelectTrigger>
-              <SelectContent>
-                {loadingDashboards ? (
-                  <div className="p-2 text-center">
-                    <Loader2 className="h-4 w-4 animate-spin mx-auto" />
-                  </div>
-                ) : dashboards.length === 0 ? (
-                  <div className="p-2 text-sm text-gray-500 text-center">
-                    No dashboards yet
-                  </div>
-                ) : (
-                  dashboards.map((dashboard) => (
-                    <SelectItem key={dashboard.id} value={dashboard.id}>
-                      {dashboard.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCreateDialogOpen(true)}
-              title="Create new dashboard"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-
-            <Button
-              size="sm"
-              onClick={pinChart}
-              disabled={pinning || !selectedDashboard}
-              title="Pin chart"
-            >
-              {pinning ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Pin className="h-4 w-4" />
-              )}
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowPinDropdown(false)}
-              title="Cancel"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
+            {loadingDashboards ? (
+              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+            ) : (
+              <>
+                <Select
+                  value={selectedDashboard}
+                  onValueChange={setSelectedDashboard}
+                >
+                  <SelectTrigger className="w-[180px] h-8">
+                    <SelectValue placeholder="Select dashboard" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dashboards.map((dashboard) => (
+                      <SelectItem key={dashboard.id} value={dashboard.id}>
+                        {dashboard.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setCreateDialogOpen(true)}
+                  title="Create new dashboard"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={pinChart}
+                  disabled={!selectedDashboard || pinning}
+                >
+                  {pinning ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowPinDropdown(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>
 
       {/* Create Dashboard Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Dashboard</DialogTitle>
             <DialogDescription>
-              Give your dashboard a name to start organizing charts
+              Create a new dashboard to organize your charts
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="dashboard-name">Dashboard Name</Label>
-            <Input
-              id="dashboard-name"
-              placeholder="e.g., Sales Analytics"
-              value={newDashboardName}
-              onChange={(e) => setNewDashboardName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newDashboardName.trim()) {
-                  createDashboard();
-                }
-              }}
-              className="mt-2"
-              autoFocus
-            />
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="dashboard-name">Dashboard Name</Label>
+              <Input
+                id="dashboard-name"
+                placeholder="My Dashboard"
+                value={newDashboardName}
+                onChange={(e) => setNewDashboardName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    createNewDashboard();
+                  }
+                }}
+              />
+            </div>
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => {
-                setCreateDialogOpen(false);
-                setNewDashboardName("");
-              }}
+              onClick={() => setCreateDialogOpen(false)}
             >
               Cancel
             </Button>
-            <Button
-              onClick={createDashboard}
-              disabled={!newDashboardName.trim()}
-            >
-              Create Dashboard
-            </Button>
+            <Button onClick={createNewDashboard}>Create Dashboard</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
