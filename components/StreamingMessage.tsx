@@ -14,6 +14,8 @@ import {
 import { StreamStatus, StreamError } from "@/types/chat";
 import ReactMarkdown from "react-markdown";
 import { Markdown } from "./Markdown";
+import { useRouter } from "next/navigation";
+import { BillingUpgrade } from "./BillingUpgrade";
 
 interface StreamingMessageProps {
   status: StreamStatus | null;
@@ -32,6 +34,11 @@ export default function StreamingMessage({
   error,
   onDismissError,
 }: Readonly<StreamingMessageProps>) {
+  const router = useRouter();
+  const upgradeFn = () => {
+    router.push("/billing");
+  };
+
   return (
     <div className="space-y-4">
       {/* Status Indicator - Only show if no error */}
@@ -105,22 +112,23 @@ export default function StreamingMessage({
 
               {/* Upgrade Required */}
               {error.upgradeRequired && error.requiredPlan && (
-                <div className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/30 dark:to-blue-900/30 rounded-lg p-3 mb-2">
+                <div className="bg-gradient-to-r from-emerald-50 to-cyan-50 dark:from-emerald-950/50 dark:to-cyan-950/50 rounded-lg p-3 mb-2 border border-emerald-200/50 dark:border-emerald-800/50">
                   <div className="flex items-start gap-2">
-                    <Crown className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                    <Crown className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-purple-900 dark:text-purple-100 mb-1">
+                      <p className="text-xs font-medium text-emerald-900 dark:text-emerald-100 mb-1">
                         Available on{" "}
                         {error.requiredPlan.charAt(0).toUpperCase() +
                           error.requiredPlan.slice(1)}{" "}
                         Plan
                       </p>
-                      <button
-                        onClick={() => (window.location.href = "/billing")}
-                        className="text-xs font-semibold text-purple-700 dark:text-purple-300 underline hover:no-underline"
+                      <BillingUpgrade
+                        variant="link"
+                        size="sm"
+                        className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 h-auto p-0"
                       >
                         Upgrade Now →
-                      </button>
+                      </BillingUpgrade>
                     </div>
                   </div>
                 </div>
@@ -130,20 +138,21 @@ export default function StreamingMessage({
               {error.limitReached &&
                 error.currentUsage !== undefined &&
                 error.limit !== undefined && (
-                  <div className="bg-amber-100 dark:bg-amber-900/30 rounded-lg p-3 mb-2">
+                  <div className="bg-amber-50 dark:bg-amber-950/50 rounded-lg p-3 mb-2 border border-amber-200/50 dark:border-amber-800/50">
                     <div className="flex items-start gap-2">
-                      <TrendingUp className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <TrendingUp className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-amber-900 dark:text-amber-100 mb-1">
                           Daily Usage: {error.currentUsage} / {error.limit}{" "}
                           queries
                         </p>
-                        <button
-                          onClick={() => (window.location.href = "/billing")}
-                          className="text-xs font-semibold text-amber-700 dark:text-amber-300 underline hover:no-underline"
+                        <BillingUpgrade
+                          variant="link"
+                          size="sm"
+                          className="text-xs font-semibold text-amber-700 dark:text-amber-300 h-auto p-0"
                         >
                           Upgrade for More Queries →
-                        </button>
+                        </BillingUpgrade>
                       </div>
                     </div>
                   </div>

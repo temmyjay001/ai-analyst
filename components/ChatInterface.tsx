@@ -11,6 +11,7 @@ import ChatMessageComponent from "./ChatMessage";
 import StreamingMessage from "./StreamingMessage";
 import { ChatMessage, ChatSession } from "@/types/chat";
 import EmptyState from "./EmptyState";
+import { BillingUpgrade } from "./BillingUpgrade";
 
 interface ChatInterfaceProps {
   sessionId?: string;
@@ -356,14 +357,13 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                                 deepError.requiredPlan.slice(1)}{" "}
                               Plan
                             </p>
-                            <button
-                              onClick={() =>
-                                (window.location.href = "/billing")
-                              }
-                              className="text-xs font-semibold text-purple-700 dark:text-purple-300 underline hover:no-underline"
+                            <BillingUpgrade
+                              variant="link"
+                              size="sm"
+                              className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 h-auto p-0"
                             >
                               Upgrade Now →
-                            </button>
+                            </BillingUpgrade>
                           </div>
                         </div>
                       </div>

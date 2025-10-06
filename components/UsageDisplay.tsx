@@ -1,8 +1,9 @@
+// components/UsageDisplay.tsx
 "use client";
 
 import { useState } from "react";
 import { Zap } from "lucide-react";
-import Link from "next/link";
+import { BillingUpgrade } from "./BillingUpgrade";
 import { useUserStore } from "@/store/userStore";
 
 export default function UsageDisplay() {
@@ -87,12 +88,12 @@ export default function UsageDisplay() {
 
             {isNearLimit && plan === "free" && (
               <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                <Link
-                  href="/billing"
-                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+                <BillingUpgrade
+                  variant="link"
+                  className="text-sm text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium p-0 h-auto"
                 >
                   Upgrade for more queries →
-                </Link>
+                </BillingUpgrade>
               </div>
             )}
           </div>
