@@ -1,568 +1,836 @@
-// app/page.tsx
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Clock, Star, History, X, Download, BarChart2 } from "lucide-react";
-import QueryHistory from "../components/QueryHistory";
-import SmartSuggestions from "../components/SmartSuggestions";
-import ExportMenu from "../components/ExportMenu";
-import NaturalLanguageFilterBar from "../components/NaturalLanguageFilterBar";
-import DataVisualization from "../components/DataVisualization"; //VisualizationToggle,
-import QueryHistoryManager from "../lib/queryHistory";
-import { SmartSuggestionsEngine } from "../lib/smartSuggestions";
-import { QueryHistoryItem } from "@/types/query";
+import { useState } from "react";
+import {
+  ArrowRight,
+  Database,
+  MessageCircle,
+  BarChart3,
+  Check,
+  Menu,
+  X,
+  Zap,
+  Shield,
+  Sparkles,
+  TrendingUp,
+  ChevronDown,
+  Mail,
+  Globe,
+  LayoutDashboard,
+  Pin,
+  RefreshCw,
+  Grid3x3,
+} from "lucide-react";
+import Link from "next/link";
 
-interface QueryResult {
-  success: boolean;
-  question?: string;
-  sql?: string;
-  rowCount?: number;
-  queryTime?: number;
-  results?: any[];
-  interpretation?: string;
-  truncated?: boolean;
-  error?: string;
-  fromCache?: boolean;
-  cacheKey?: string;
-  timestamp?: string;
-}
+export default function LandingPage() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-interface CacheStats {
-  schema: { size: number; keys: string[] };
-  queries: { size: number; keys: string[] };
-}
+  const features = [
+    {
+      icon: MessageCircle,
+      title: "Natural Language Queries",
+      description:
+        "Ask questions in plain English. No SQL knowledge required. Our AI understands your intent and generates optimized queries instantly.",
+      badge: null,
+    },
+    {
+      icon: LayoutDashboard,
+      title: "Custom Dashboards",
+      description:
+        "Create unlimited dashboards and pin your most important charts. Organize insights by team, project, or metric with grid or list views.",
+      badge: "NEW",
+    },
+    {
+      icon: Sparkles,
+      title: "Deep Analysis",
+      description:
+        "Go beyond surface-level insights. Automatically asks 3 intelligent follow-up questions to uncover hidden patterns and actionable trends.",
+      badge: "GROWTH+",
+    },
+    {
+      icon: BarChart3,
+      title: "Instant Visualizations",
+      description:
+        "Get beautiful, interactive charts automatically generated from your query results. Download as PNG or pin to dashboards with one click.",
+      badge: null,
+    },
+    {
+      icon: Database,
+      title: "Multi-Database Support",
+      description:
+        "Connect to PostgreSQL, MySQL, SQL Server, and SQLite. Switch between databases seamlessly in one unified interface.",
+      badge: null,
+    },
+    {
+      icon: Shield,
+      title: "Enterprise-Grade Security",
+      description:
+        "Your credentials are encrypted with AES-256-GCM. SSL connections supported. Read-only queries ensure your data stays safe.",
+      badge: null,
+    },
+  ];
 
-// A simple component to parse and render markdown-like bold text (**text**)
-// and preserve newlines.
-const SimpleMarkdown: React.FC<{ text: string; className?: string }> = ({
-  text,
-  className,
-}) => {
-  const parts = text.split(/(\*\*.*?\*\*|\n)/g);
-
-  return (
-    <p className={className}>
-      {parts.map((part, i) => {
-        // A simple function to remove markdown escape backslashes
-        const unescape = (str: string) => str.replace(/\\(.)/g, "$1");
-        if (part === "\n") return <br key={i} />;
-        if (part.startsWith("**") && part.endsWith("**")) {
-          return <strong key={i}>{unescape(part.slice(2, -2))}</strong>;
-        }
-        return unescape(part);
-      })}
-    </p>
-  );
-};
-
-export default function Home() {
-  const [question, setQuestion] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<QueryResult | null>(null);
-  const [useCache, setUseCache] = useState(true);
-  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
-
-  // History and suggestions state
-  const [history, setHistory] = useState<QueryHistoryItem[]>([]);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showFavorites, setShowFavorites] = useState(false);
-
-  // New states for export, filter, and visualization features
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const [currentQueryItem, setCurrentQueryItem] =
-    useState<QueryHistoryItem | null>(null);
-  const [filteredResults, setFilteredResults] = useState<any[] | null>(null);
-  const [showChart, setShowChart] = useState(false);
-
-  const historyManager = useRef(QueryHistoryManager.getInstance());
-  const suggestionsEngine = useRef(SmartSuggestionsEngine.getInstance());
-
-  // Fetch cache stats
-  const fetchCacheStats = async () => {
-    try {
-      const response = await fetch("/api/cache");
-      const data = await response.json();
-      setCacheStats(data);
-    } catch (error) {
-      console.error("Failed to fetch cache stats:", error);
-    }
-  };
-
-  useEffect(() => {
-    fetchCacheStats();
-    setHistory(historyManager.current.getHistory());
-  }, []);
-
-  const askQuestion = async (questionText?: string) => {
-    const queryText = questionText || question;
-    if (!queryText.trim()) return;
-
-    setLoading(true);
-    setResult(null);
-    setSuggestions([]);
-    setFilteredResults(null);
-    setShowChart(false);
-
-    try {
-      const response = await fetch("/api/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question: queryText,
-          useCache,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Create QueryHistoryItem for successful query
-        const queryItem: QueryHistoryItem = {
-          id: crypto.randomUUID(),
-          question: queryText,
-          sql: data.sql,
-          results: data.results,
-          interpretation: data.interpretation,
-          execution_time: data.queryTime,
-          timestamp: new Date(),
-          favorite: false,
-          fromCache: data.fromCache,
-        };
-
-        // Save to history
-        const savedQuery = historyManager.current.addQuery(queryItem);
-        setCurrentQueryItem(savedQuery);
-        setHistory(historyManager.current.getHistory());
-
-        // Generate suggestions
-        setSuggestionsLoading(true);
-        try {
-          const newSuggestions =
-            await suggestionsEngine.current.generateSuggestions(
-              queryText,
-              data.sql,
-              data.results
-            );
-          setSuggestions(newSuggestions);
-        } catch (error) {
-          console.error("Failed to generate suggestions:", error);
-        } finally {
-          setSuggestionsLoading(false);
-        }
-      } else if (data.error) {
-        // Still save failed queries to history
-        const failedQuery: QueryHistoryItem = {
-          id: crypto.randomUUID(),
-          question: queryText,
-          timestamp: new Date(),
-          favorite: false,
-          error: data.error,
-        };
-        historyManager.current.addQuery(failedQuery);
-        setHistory(historyManager.current.getHistory());
-      }
-
-      setResult(data);
-      fetchCacheStats();
-    } catch (error) {
-      console.error("Query failed:", error);
-      setResult({
-        success: false,
-        error: "Failed to connect to server",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSelectQuery = (query: QueryHistoryItem) => {
-    setQuestion(query.question);
-    if (query.results) {
-      setResult({
-        success: true,
-        question: query.question,
-        sql: query.sql,
-        results: query.results,
-        interpretation: query.interpretation,
-        queryTime: query.execution_time,
-        fromCache: query.fromCache,
-      });
-      setCurrentQueryItem(query);
-      setFilteredResults(null);
-      setShowChart(false);
-    } else {
-      askQuestion(query.question);
-    }
-  };
-
-  const handleToggleFavorite = (id: string) => {
-    historyManager.current.toggleFavorite(id);
-    setHistory([...historyManager.current.getHistory()]);
-  };
-
-  const clearCache = async () => {
-    try {
-      await fetch("/api/cache", { method: "DELETE" });
-      fetchCacheStats();
-    } catch (error) {
-      console.error("Failed to clear cache:", error);
-    }
-  };
-
-  const formatValue = (value: any) => {
-    if (value === null) return "null";
-    if (value === true) return "✓";
-    if (value === false) return "✗";
-    if (typeof value === "object") return JSON.stringify(value);
-    return String(value);
-  };
-
-  // Get the data to display (filtered or original)
-  const displayData = filteredResults || result?.results || [];
+  const faqs = [
+    {
+      question: "How does the AI understand my questions?",
+      answer:
+        "We use Google's Gemini AI to understand your natural language questions and convert them into optimized SQL queries. The AI is trained on database schemas and can interpret complex business questions, generating accurate queries even for intricate multi-table joins.",
+    },
+    {
+      question: "What are Custom Dashboards?",
+      answer:
+        "Custom Dashboards let you organize and monitor your most important metrics in one place. Pin charts from any query, create multiple dashboards for different teams or projects, refresh data with one click, and switch between grid or list view. Available on Starter plans and above.",
+    },
+    {
+      question: "Is my database data secure?",
+      answer:
+        "Absolutely. Your database credentials are encrypted using AES-256-GCM encryption before storage. We support SSL connections for secure data transmission. All queries are read-only by default (only SELECT allowed), and we never store your actual business data - only query results temporarily for visualization.",
+    },
+    {
+      question: "What is Deep Analysis?",
+      answer:
+        "Deep Analysis is our advanced feature (available on Growth+ plans) that goes beyond answering your initial question. After running your query, our AI automatically generates and executes 3 intelligent follow-up queries to uncover trends, patterns, and insights you might have missed. It's like having a data analyst working alongside you.",
+    },
+    {
+      question: "Which databases do you support?",
+      answer:
+        "We currently support PostgreSQL, MySQL, Microsoft SQL Server, and SQLite. Each database has full support for its specific SQL dialect and features. You can connect multiple databases and switch between them seamlessly.",
+    },
+    {
+      question: "Can I export my query results and charts?",
+      answer:
+        "Yes! You can export query results to JSON format and download charts as high-resolution PNG images. You can also pin charts to custom dashboards for ongoing monitoring. All exports include metadata like the SQL query, execution time, and AI interpretations.",
+    },
+    {
+      question: "What happens when I hit my query limit?",
+      answer:
+        "Each plan has a daily query limit (Free: 3/day, Starter: 50/day, Growth: 300/day). Once you hit the limit, you'll be prompted to upgrade or wait until the next day when your quota resets. Deep Analysis uses 3 queries per execution. Dashboard refreshes also count toward your daily limit. Enterprise plans have unlimited queries.",
+    },
+    {
+      question: "How accurate are the SQL queries generated?",
+      answer:
+        "Our AI achieves high accuracy by understanding your complete database schema, including tables, columns, data types, and relationships. For complex queries, we recommend reviewing the generated SQL (which is always shown) before execution. You can also refine queries through follow-up questions.",
+    },
+  ];
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Header */}
-        <div className="mb-8 flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              🤖 Fintech AI Data Assistant
+    <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors">
+      {/* Navigation */}
+      <nav className="border-b border-gray-200 dark:border-gray-800 sticky top-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <Link href="/" className="flex-shrink-0 flex items-center">
+                <div className="h-8 w-8 bg-emerald-600 rounded-lg flex items-center justify-center">
+                  <Database className="h-5 w-5 text-white" />
+                </div>
+                <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">
+                  WhoPrompt
+                </span>
+              </Link>
+            </div>
+
+            <div className="hidden md:block">
+              <div className="ml-10 flex items-baseline space-x-4">
+                <a
+                  href="#features"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  Features
+                </a>
+                <a
+                  href="#pricing"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  Pricing
+                </a>
+                <a
+                  href="#faq"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  FAQ
+                </a>
+                <Link
+                  href="/docs"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  Docs
+                </Link>
+                <Link
+                  href="/about"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  About
+                </Link>
+                <Link
+                  href="/contact"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  Contact
+                </Link>
+                <Link
+                  href="/auth/signin"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  className="bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Start Free
+                </Link>
+              </div>
+            </div>
+
+            <div className="md:hidden">
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                {mobileMenuOpen ? (
+                  <X className="block h-6 w-6" />
+                ) : (
+                  <Menu className="block h-6 w-6" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {mobileMenuOpen && (
+            <div className="md:hidden">
+              <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t border-gray-200 dark:border-gray-800">
+                <a
+                  href="#features"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white block px-3 py-2 text-base font-medium"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Features
+                </a>
+                <a
+                  href="#pricing"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white block px-3 py-2 text-base font-medium"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Pricing
+                </a>
+                <a
+                  href="#faq"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white block px-3 py-2 text-base font-medium"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  FAQ
+                </a>
+                <Link
+                  href="/docs"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white block px-3 py-2 text-base font-medium"
+                >
+                  Docs
+                </Link>
+                <Link
+                  href="/about"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white block px-3 py-2 text-base font-medium"
+                >
+                  About
+                </Link>
+                <Link
+                  href="/contact"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white block px-3 py-2 text-base font-medium"
+                >
+                  Contact
+                </Link>
+                <Link
+                  href="/auth/signin"
+                  className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white block px-3 py-2 text-base font-medium"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  className="bg-emerald-600 text-white hover:bg-emerald-700 block px-3 py-2 rounded-lg text-base font-medium transition-colors"
+                >
+                  Start Free
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section className="pt-20 pb-16 sm:pt-24 sm:pb-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <div className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 mb-8">
+              <Zap className="h-4 w-4 mr-2" />
+              Built for startups & growing companies
+            </div>
+
+            <h1 className="text-4xl sm:text-6xl font-bold text-gray-900 dark:text-white mb-6">
+              Turn your database into{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600">
+                insights with AI
+              </span>
             </h1>
-            <p className="text-gray-600">
-              Ask questions about your data in plain English
+
+            <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto">
+              Smart database analytics that speaks your language. No SQL
+              required. Get answers to your business questions in seconds, not
+              hours.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+              <Link
+                href="/auth/signup"
+                className="bg-emerald-600 text-white hover:bg-emerald-700 px-8 py-4 rounded-lg text-lg font-semibold transition-colors inline-flex items-center justify-center"
+              >
+                Start Free - No Credit Card Required
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+              <button className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-8 py-4 rounded-lg text-lg font-semibold transition-colors">
+                Watch Demo
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Join 100+ startups getting faster insights from their data
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Dashboard Feature Spotlight */}
+      <section className="py-20 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-gray-800 dark:via-gray-850 dark:to-gray-900">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-600 text-white mb-6">
+                <Zap className="h-3 w-3 mr-1" />
+                NEW FEATURE
+              </div>
+              <h2 className="text-4xl font-bold text-gray-900 dark:text-white mb-6">
+                Build Custom Dashboards
+                <span className="block text-emerald-600 dark:text-emerald-400 mt-2">
+                  in Seconds
+                </span>
+              </h2>
+              <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
+                Stop switching between queries. Pin your most important charts
+                to custom dashboards and monitor everything that matters in one
+                place.
+              </p>
+
+              <div className="space-y-4 mb-8">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <div className="h-10 w-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center">
+                      <Pin className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Pin Any Chart
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      One-click pinning from any query result. Organize by team,
+                      project, or metric.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                      <RefreshCw className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Refresh with One Click
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Keep your dashboards up-to-date. Refresh individual charts
+                      or entire dashboards instantly.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <div className="h-10 w-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                      <Grid3x3 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Multiple View Modes
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Switch between grid and list views. Customize your layout
+                      for optimal monitoring.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Link
+                href="/auth/signup"
+                className="inline-flex items-center bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-3 rounded-lg font-semibold transition-colors"
+              >
+                Start Building Dashboards
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+            </div>
+
+            {/* Dashboard Preview Mockup */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-cyan-400 rounded-2xl transform rotate-3 opacity-20"></div>
+              <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2">
+                    <LayoutDashboard className="h-5 w-5 text-emerald-600" />
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      Sales Dashboard
+                    </span>
+                    <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded-full">
+                      4 charts
+                    </span>
+                  </div>
+                  <div className="flex gap-1">
+                    <div className="h-2 w-2 bg-red-500 rounded-full"></div>
+                    <div className="h-2 w-2 bg-yellow-500 rounded-full"></div>
+                    <div className="h-2 w-2 bg-green-500 rounded-full"></div>
+                  </div>
+                </div>
+
+                {/* Mockup Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div
+                      key={i}
+                      className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-750 rounded-lg p-4 border border-gray-200 dark:border-gray-600"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="h-3 w-20 bg-gray-300 dark:bg-gray-600 rounded"></div>
+                        <BarChart3 className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="h-12 bg-gradient-to-t from-emerald-200 to-emerald-100 dark:from-emerald-900 dark:to-emerald-800 rounded"></div>
+                        <div className="h-2 w-16 bg-gray-300 dark:bg-gray-600 rounded"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="py-20 bg-gray-50 dark:bg-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              Everything you need to analyze your data
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+              From natural language queries to custom dashboards - all in one
+              platform
             </p>
           </div>
 
-          <div className="flex items-center space-x-4">
-            {/* History Controls */}
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => {
-                  setShowFavorites(!showFavorites);
-                  setShowHistory(false);
-                }}
-                className={`p-2 rounded-lg transition-colors ${
-                  showFavorites
-                    ? "bg-yellow-100 text-yellow-700"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-                title="Favorites"
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((feature, index) => (
+              <div
+                key={index}
+                className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-700 relative"
               >
-                <Star className="h-5 w-5" />
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowHistory(!showHistory);
-                  setShowFavorites(false);
-                }}
-                className={`p-2 rounded-lg transition-colors ${
-                  showHistory
-                    ? "bg-blue-100 text-blue-700"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-                title="Query History"
-              >
-                <History className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Cache Stats */}
-            <div className="bg-white rounded-lg shadow-sm p-4 text-sm">
-              <div className="flex items-center gap-4 mb-2">
-                <h3 className="font-semibold text-gray-700">Cache Status</h3>
-                <button
-                  onClick={clearCache}
-                  className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                >
-                  Clear All
-                </button>
-              </div>
-              {cacheStats && (
-                <div className="space-y-1 text-gray-600">
-                  <div>
-                    Schema:{" "}
-                    {cacheStats.schema.size > 0 ? "✓ Cached" : "○ Empty"}
+                {feature.badge && (
+                  <div className="absolute -top-3 -right-3">
+                    <span
+                      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                        feature.badge === "NEW"
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gradient-to-r from-purple-600 to-pink-600 text-white"
+                      }`}
+                    >
+                      {feature.badge}
+                    </span>
                   </div>
-                  <div>Queries: {cacheStats.queries.size} cached</div>
+                )}
+                <div className="h-12 w-12 bg-emerald-100 dark:bg-emerald-900 rounded-lg flex items-center justify-center mb-4">
+                  <feature.icon className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                 </div>
-              )}
-            </div>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  {feature.title}
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  {feature.description}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
+      </section>
 
-        <div className="flex gap-6 min-w-0">
-          {/* Sidebar for History */}
-          {(showHistory || showFavorites) && (
-            <div className="w-80 flex-shrink-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900">
-                  {showFavorites ? "Favorites" : "Query History"}
-                </h2>
-                <button
-                  onClick={() => {
-                    setShowHistory(false);
-                    setShowFavorites(false);
-                  }}
-                  className="p-1 rounded hover:bg-gray-100"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+      {/* Pricing Section */}
+      <section id="pricing" className="py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              Simple, transparent pricing
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto mb-8">
+              Start free, upgrade when you need more. No surprises.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {/* Free Plan */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                Free
+              </h3>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-gray-900 dark:text-white">
+                  $0
+                </span>
+                <span className="text-gray-500 dark:text-gray-400">/month</span>
               </div>
-
-              <QueryHistory
-                history={history}
-                onSelectQuery={handleSelectQuery}
-                onToggleFavorite={handleToggleFavorite}
-                showFavoritesOnly={showFavorites}
-              />
-            </div>
-          )}
-
-          {/* Main Content */}
-          <div className="flex-1 min-w-0 overflow-hidden">
-            {/* Input Section */}
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <div className="flex gap-3 mb-3">
-                <input
-                  type="text"
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  onKeyPress={(e) =>
-                    e.key === "Enter" && !loading && askQuestion()
-                  }
-                  placeholder="e.g., Show me failed transactions from yesterday, or What's the average transaction amount by merchant?"
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={loading}
-                />
-                <button
-                  onClick={() => askQuestion()}
-                  disabled={loading}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                      <span>Analyzing...</span>
-                    </div>
-                  ) : (
-                    "Ask Question"
-                  )}
-                </button>
-              </div>
-
-              {/* Cache Toggle */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="useCache"
-                  checked={useCache}
-                  onChange={(e) => setUseCache(e.target.checked)}
-                  className="rounded"
-                />
-                <label htmlFor="useCache" className="text-sm text-gray-600">
-                  Use cache for faster responses
-                </label>
-              </div>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    3 queries/day
+                  </span>
+                </li>
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    1 connection
+                  </span>
+                </li>
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    7-day history
+                  </span>
+                </li>
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Community support
+                  </span>
+                </li>
+              </ul>
+              <Link
+                href="/auth/signup"
+                className="block w-full text-center px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+              >
+                Get Started
+              </Link>
             </div>
 
-            {/* Smart Suggestions */}
-            {suggestions.length > 0 && (
-              <SmartSuggestions
-                suggestions={suggestions}
-                onSelectSuggestion={(suggestion) => {
-                  setQuestion(suggestion);
-                  askQuestion(suggestion);
-                }}
-                loading={suggestionsLoading}
-              />
-            )}
+            {/* Starter Plan - Most Popular */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border-2 border-emerald-600 p-8 relative">
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                <span className="bg-emerald-600 text-white px-4 py-1 rounded-full text-sm font-semibold">
+                  MOST POPULAR
+                </span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                Starter
+              </h3>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-gray-900 dark:text-white">
+                  $9
+                </span>
+                <span className="text-gray-500 dark:text-gray-400">/month</span>
+              </div>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    50 queries/day
+                  </span>
+                </li>
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    3 connections
+                  </span>
+                </li>
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    30-day history
+                  </span>
+                </li>
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Email support
+                  </span>
+                </li>
+              </ul>
+              <Link
+                href="/auth/signup"
+                className="block w-full text-center px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
+              >
+                Start Free Trial
+              </Link>
+            </div>
 
-            {/* Results Section */}
-            {result && (
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                {result.success ? (
-                  <>
-                    {/* Result Header */}
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-xl font-semibold text-gray-900">
-                        Results
-                      </h2>
-                      <div className="flex items-center gap-3">
-                        {/* Export Menu */}
-                        {currentQueryItem && currentQueryItem.results && (
-                          <div className="relative">
-                            <button
-                              onClick={() => setShowExportMenu(!showExportMenu)}
-                              className="flex items-center space-x-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                            >
-                              <Download className="h-4 w-4" />
-                              <span>Export & Share</span>
-                            </button>
-                            {showExportMenu && (
-                              <ExportMenu
-                                query={currentQueryItem}
-                                onClose={() => setShowExportMenu(false)}
-                              />
-                            )}
-                          </div>
-                        )}
+            {/* Growth Plan */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                Growth
+              </h3>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-gray-900 dark:text-white">
+                  $39
+                </span>
+                <span className="text-gray-500 dark:text-gray-400">/month</span>
+              </div>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    300 queries/day
+                  </span>
+                </li>
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    10 connections
+                  </span>
+                </li>
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    <strong>Deep Analysis</strong>
+                  </span>
+                </li>
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    90-day history
+                  </span>
+                </li>
+                <li className="flex items-start">
+                  <Check className="h-5 w-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Priority support
+                  </span>
+                </li>
+              </ul>
+              <Link
+                href="/auth/signup"
+                className="block w-full text-center px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+              >
+                Start Free Trial
+              </Link>
+            </div>
+          </div>
 
-                        {/* Visualization Toggle */}
-                        {result.results && result.results.length > 0 && (
-                          <button
-                            onClick={() => setShowChart(!showChart)}
-                            className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
-                              showChart
-                                ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                            }`}
-                          >
-                            <BarChart2 className="h-4 w-4" />
-                            <span>
-                              {showChart ? "Hide Chart" : "Show Chart"}
-                            </span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
+          <div className="text-center mt-12">
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              Need unlimited queries and connections?
+            </p>
+            <Link
+              href="/contact"
+              className="inline-flex items-center text-emerald-600 hover:text-emerald-700 font-medium"
+            >
+              Contact us for Enterprise pricing
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
 
-                    {/* Interpretation */}
-                    {result.interpretation && (
-                      <div className="mb-4 p-4 bg-blue-50 rounded-lg">
-                        <SimpleMarkdown
-                          text={result.interpretation}
-                          className="text-blue-900 text-sm"
-                        />
-                      </div>
-                    )}
+      {/* FAQ Section */}
+      <section id="faq" className="py-20 bg-gray-50 dark:bg-gray-800">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300">
+              Everything you need to know about WhoPrompt
+            </p>
+          </div>
 
-                    {/* Metadata */}
-                    <div className="flex gap-4 text-sm text-gray-600 mb-4">
-                      <span>
-                        {result.rowCount} row{result.rowCount !== 1 ? "s" : ""}{" "}
-                        returned
-                      </span>
-                      {result.queryTime && (
-                        <span>Query took {result.queryTime}ms</span>
-                      )}
-                      {result.fromCache && (
-                        <span className="text-green-600">📦 From cache</span>
-                      )}
-                    </div>
-
-                    {/* SQL Query */}
-                    {result.sql && (
-                      <details className="mb-4">
-                        <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-900">
-                          View SQL Query
-                        </summary>
-                        <pre className="mt-2 p-3 bg-gray-100 rounded text-xs overflow-x-auto">
-                          {result.sql}
-                        </pre>
-                      </details>
-                    )}
-
-                    {/* Natural Language Filter */}
-                    {result.results && result.results.length > 0 && (
-                      <NaturalLanguageFilterBar
-                        originalResults={result.results}
-                        onFilter={(filtered, message) => {
-                          setFilteredResults(filtered);
-                        }}
-                        onClear={() => setFilteredResults(null)}
-                      />
-                    )}
-
-                    {/* Data Display - Chart or Table */}
-                    {showChart &&
-                    result.results &&
-                    result.results.length > 0 ? (
-                      <DataVisualization
-                        data={displayData}
-                        columns={Object.keys(result.results[0])}
-                      />
-                    ) : (
-                      /* Data Table */
-                      result.results &&
-                      result.results.length > 0 && (
-                        <div className="mt-4">
-                          {/* Table Container with controlled width */}
-                          <div className="w-full overflow-hidden border border-gray-200 rounded-lg">
-                            <div className="overflow-x-auto">
-                              <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                  <tr>
-                                    {Object.keys(result.results[0]).map(
-                                      (col) => (
-                                        <th
-                                          key={col}
-                                          className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                        >
-                                          {/* Truncate long column names */}
-                                          <div
-                                            className="truncate max-w-[200px]"
-                                            title={col}
-                                          >
-                                            {col}
-                                          </div>
-                                        </th>
-                                      )
-                                    )}
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                  {displayData.map((row, i) => (
-                                    <tr key={i} className="hover:bg-gray-50">
-                                      {Object.entries(row).map(
-                                        ([key, val], j) => (
-                                          <td
-                                            key={j}
-                                            className="px-3 py-2 text-sm text-gray-900"
-                                          >
-                                            {/* Smart value formatting with truncation */}
-                                            <div
-                                              className="max-w-[300px] truncate"
-                                              title={String(formatValue(val))}
-                                            >
-                                              {formatValue(val)}
-                                            </div>
-                                          </td>
-                                        )
-                                      )}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-
-                          {/* Optional: Show message if table is scrollable */}
-                          {result.results &&
-                            Object.keys(result.results[0]).length > 5 && (
-                              <p className="text-xs text-gray-500 mt-2 text-center">
-                                ← Scroll horizontally to see more columns →
-                              </p>
-                            )}
-                        </div>
-                      )
-                    )}
-                  </>
-                ) : (
-                  /* Error State */
-                  <div className="text-red-600">
-                    <h3 className="font-semibold mb-2">Error</h3>
-                    <p>{result.error}</p>
+          <div className="space-y-4">
+            {faqs.map((faq, index) => (
+              <div
+                key={index}
+                className="bg-white dark:bg-gray-900 rounded-lg shadow-sm overflow-hidden"
+              >
+                <button
+                  onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                  className="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <span className="font-semibold text-gray-900 dark:text-white pr-8">
+                    {faq.question}
+                  </span>
+                  <ChevronDown
+                    className={`h-5 w-5 text-gray-500 transition-transform flex-shrink-0 ${
+                      openFaq === index ? "transform rotate-180" : ""
+                    }`}
+                  />
+                </button>
+                {openFaq === index && (
+                  <div className="px-6 pb-4 text-gray-600 dark:text-gray-400">
+                    {faq.answer}
                   </div>
                 )}
               </div>
-            )}
+            ))}
           </div>
         </div>
-      </div>
-    </main>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+            Ready to unlock your data&apos;s potential?
+          </h2>
+          <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
+            Join hundreds of companies using AI to make better data-driven
+            decisions
+          </p>
+          <Link
+            href="/auth/signup"
+            className="inline-flex items-center bg-emerald-600 text-white hover:bg-emerald-700 px-8 py-4 rounded-lg text-lg font-semibold transition-colors"
+          >
+            Start Free Today
+            <ArrowRight className="ml-2 h-5 w-5" />
+          </Link>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-gray-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="grid md:grid-cols-4 gap-8">
+            <div>
+              <div className="flex items-center mb-4">
+                <div className="h-8 w-8 bg-emerald-600 rounded-lg flex items-center justify-center">
+                  <Database className="h-5 w-5 text-white" />
+                </div>
+                <span className="ml-2 text-xl font-bold text-white">
+                  WhoPrompt
+                </span>
+              </div>
+              <p className="text-sm text-gray-400">
+                AI-powered database analytics for modern teams
+              </p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-white mb-4">Product</h3>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <a
+                    href="#features"
+                    className="hover:text-white transition-colors"
+                  >
+                    Features
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="#pricing"
+                    className="hover:text-white transition-colors"
+                  >
+                    Pricing
+                  </a>
+                </li>
+                <li>
+                  <Link
+                    href="/docs"
+                    className="hover:text-white transition-colors"
+                  >
+                    Documentation
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-white mb-4">Company</h3>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link
+                    href="/about"
+                    className="hover:text-white transition-colors"
+                  >
+                    About
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/contact"
+                    className="hover:text-white transition-colors"
+                  >
+                    Contact
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/privacy"
+                    className="hover:text-white transition-colors"
+                  >
+                    Privacy Policy
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/terms"
+                    className="hover:text-white transition-colors"
+                  >
+                    Terms of Service
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-white mb-4">Connect</h3>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <a
+                    href="mailto:hello@whoprompt.com"
+                    className="hover:text-white transition-colors flex items-center"
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    hello@whoprompt.com
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://twitter.com/whoprompt"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors flex items-center"
+                  >
+                    <Globe className="h-4 w-4 mr-2" />
+                    @whoprompt
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-800 mt-8 pt-8 text-sm text-center text-gray-400">
+            <p>© 2025 WhoPrompt. All rights reserved.</p>
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 }

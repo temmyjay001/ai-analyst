@@ -1,124 +1,338 @@
 // lib/schema.ts
-import { query } from "./db";
+import {
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+  boolean,
+  integer,
+  jsonb,
+  date,
+  index,
+  pgEnum,
+} from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 
-export interface TableSchema {
-  table_name: string;
-  columns: Array<{
-    column: string;
-    type: string;
-    nullable: boolean;
-  }>;
-  relationships?: Array<{
-    column: string;
-    foreign_table: string;
-    foreign_column: string;
-  }>;
-  sample_data?: any[];
-}
+// Users table
+export const users = pgTable("users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  hashedPassword: varchar("hashed_password", { length: 255 }),
+  avatar: text("avatar"),
+  emailVerified: timestamp("email_verified"),
+  plan: varchar("plan", { length: 50 }).notNull().default("free"), // free, starter, growth, enterprise
+  queryCount: integer("query_count").default(0),
+  lastQueryReset: date("last_query_reset").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
-export async function getSchemaContext() {
-  try {
-    // Get all tables and columns
-    const schemaResult = await query(`
-      SELECT 
-        t.table_name,
-        json_agg(
-          json_build_object(
-            'column', c.column_name,
-            'type', c.data_type,
-            'nullable', c.is_nullable = 'YES'
-          ) ORDER BY c.ordinal_position
-        ) as columns
-      FROM information_schema.tables t
-      JOIN information_schema.columns c 
-        ON t.table_name = c.table_name AND t.table_schema = c.table_schema
-      WHERE t.table_schema = 'public'
-        AND t.table_type = 'BASE TABLE'
-      GROUP BY t.table_name
-      ORDER BY t.table_name
-    `);
+// NextAuth required tables
+export const accounts = pgTable("accounts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 255 }).notNull(),
+  provider: varchar("provider", { length: 255 }).notNull(),
+  providerAccountId: varchar("provider_account_id", { length: 255 }).notNull(),
+  refresh_token: text("refresh_token"),
+  access_token: text("access_token"),
+  expires_at: integer("expires_at"),
+  token_type: varchar("token_type", { length: 255 }),
+  scope: varchar("scope", { length: 255 }),
+  id_token: text("id_token"),
+  session_state: varchar("session_state", { length: 255 }),
+});
 
-    // Get foreign key relationships
-    const fkResult = await query(`
-      SELECT
-        tc.table_name,
-        kcu.column_name,
-        ccu.table_name AS foreign_table,
-        ccu.column_name AS foreign_column
-      FROM information_schema.table_constraints tc
-      JOIN information_schema.key_column_usage kcu
-        ON tc.constraint_name = kcu.constraint_name
-      JOIN information_schema.constraint_column_usage ccu
-        ON ccu.constraint_name = tc.constraint_name
-      WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_schema = 'public'
-    `);
+export const sessions = pgTable("sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sessionToken: varchar("session_token", { length: 255 }).notNull().unique(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expires: timestamp("expires").notNull(),
+});
 
-    // Build schema with relationships
-    const tables: TableSchema[] = schemaResult.rows.map((table) => ({
-      table_name: table.table_name,
-      columns: table.columns,
-      relationships: fkResult.rows
-        .filter((fk) => fk.table_name === table.table_name)
-        .map((fk) => ({
-          column: fk.column_name,
-          foreign_table: fk.foreign_table,
-          foreign_column: fk.foreign_column,
-        })),
-    }));
+export const verificationTokens = pgTable("verification_tokens", {
+  identifier: varchar("identifier", { length: 255 }).notNull(),
+  token: varchar("token", { length: 255 }).notNull().unique(),
+  expires: timestamp("expires").notNull(),
+});
 
-    // Get sample data for each table (just 2 rows to keep context small)
-    //for (const table of tables) {
-    //  try {
-    //      const sampleResult = await query(
-    //        `SELECT * FROM ${table.table_name} LIMIT 2`
-    //      );
-    //      table.sample_data = sampleResult.rows;
-    //    } catch (err) {
-    //      console.log(`Could not get sample data for ${table.table_name}`);
-    //    }
-    //    }
+// Database connections
+export const databaseConnections = pgTable("database_connections", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  host: varchar("host", { length: 255 }),
+  port: integer("port"),
+  database: varchar("database", { length: 255 }),
+  username: varchar("username", { length: 255 }),
+  passwordEncrypted: text("password_encrypted"),
+  connectionUrlEncrypted: text("connection_url_encrypted"),
+  ssl: boolean("ssl").default(false),
+  isActive: boolean("is_active").default(true),
+  lastTestedAt: timestamp("last_tested_at"),
+  testStatus: varchar("test_status", { length: 50 }).default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
-    return {
-      tables,
-      formatted: formatForAI(tables),
-    };
-  } catch (error) {
-    console.error("Schema introspection error:", error);
-    throw error;
-  }
-}
+// Subscriptions
+export const subscriptions = pgTable("subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  stripeCustomerId: varchar("stripe_customer_id", { length: 255 }).notNull(),
+  stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 })
+    .notNull()
+    .unique(),
+  plan: varchar("plan", { length: 50 }).notNull(), // starter, growth, enterprise
+  status: varchar("status", { length: 50 }).notNull(), // active, canceled, past_due, etc.
+  currentPeriodStart: timestamp("current_period_start").notNull(),
+  currentPeriodEnd: timestamp("current_period_end").notNull(),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
-function formatForAI(tables: TableSchema[]): string {
-  let context = "DATABASE SCHEMA:\n\n";
+// Usage tracking
+export const usageTracking = pgTable("usage_tracking", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  date: date("date").notNull(),
+  queryCount: integer("query_count").default(0),
+  aiCostCents: integer("ai_cost_cents").default(0),
+  exportCount: integer("export_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
-  for (const table of tables) {
-    context += `TABLE: ${table.table_name}\n`;
-    context += `Columns:\n`;
+// ============================================
+// CHAT SESSIONS
+// ============================================
+export const chatSessions = pgTable(
+  "chat_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    connectionId: uuid("connection_id")
+      .references(() => databaseConnections.id, { onDelete: "cascade" })
+      .notNull(),
 
-    for (const col of table.columns) {
-      context += `  - ${col.column}: ${col.type}${
-        !col.nullable ? " (required)" : ""
-      }\n`;
-    }
+    title: varchar("title", { length: 500 }).notNull(), // From first user message
+    messageCount: integer("message_count").default(0).notNull(), // Track for limits
 
-    if (table.relationships && table.relationships.length > 0) {
-      context += `Foreign Keys:\n`;
-      for (const rel of table.relationships) {
-        context += `  - ${rel.column} references ${rel.foreign_table}.${rel.foreign_column}\n`;
-      }
-    }
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index("idx_sessions_user_updated").on(
+      table.userId,
+      table.updatedAt
+    ),
+    connectionIdx: index("idx_sessions_connection").on(table.connectionId),
+  })
+);
 
-    //if (table.sample_data && table.sample_data.length > 0) {
-    //context += `Sample row: ${JSON.stringify(
-    //table.sample_data[0],
-    //null,
-    //2
-    //  )}\n`;
-    //}
+// ============================================
+// CHAT MESSAGES
+// ============================================
+export const messageRoleEnum = pgEnum("message_role", [
+  "user",
+  "assistant",
+  "system",
+]);
 
-    context += "\n";
-  }
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .references(() => chatSessions.id, { onDelete: "cascade" })
+      .notNull(),
 
-  return context;
-}
+    role: messageRoleEnum("role").notNull(),
+    content: text("content").notNull(), // User question OR assistant interpretation
+
+    // Metadata (only for assistant messages)
+    metadata: jsonb("metadata").$type<{
+      sql?: string;
+      results?: any[];
+      executionTimeMs?: number;
+      rowCount?: number;
+      dbType?: string;
+      error?: string;
+      fromCache?: boolean;
+      cacheKey?: string;
+      isDeepAnalysis?: boolean;
+      deepAnalysisSteps?: Array<{
+        stepNumber: number;
+        question: string;
+        sql: string;
+        results: any[];
+        insights: string;
+      }>;
+      hasPartialError?: boolean;
+      canRetry?: boolean;
+      retryOf?: string;
+      retryCount?: number;
+    }>(),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    sessionIdx: index("idx_messages_session_created").on(
+      table.sessionId,
+      table.createdAt
+    ),
+  })
+);
+
+// ============================================
+// DASHBOARDS (NEW)
+// ============================================
+export const dashboards = pgTable(
+  "dashboards",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    isDefault: boolean("is_default").default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index("idx_dashboards_user").on(table.userId),
+  })
+);
+
+// ============================================
+// PINNED CHARTS (NEW)
+// ============================================
+export const pinnedCharts = pgTable(
+  "pinned_charts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    dashboardId: uuid("dashboard_id")
+      .references(() => dashboards.id, { onDelete: "cascade" })
+      .notNull(),
+
+    // Chart metadata
+    title: varchar("title", { length: 500 }).notNull(),
+    chartType: varchar("chart_type", { length: 50 }).notNull(),
+
+    // Query information
+    connectionId: uuid("connection_id")
+      .references(() => databaseConnections.id, { onDelete: "cascade" })
+      .notNull(),
+    sessionId: uuid("session_id").references(() => chatSessions.id, {
+      onDelete: "set null",
+    }),
+    messageId: uuid("message_id").references(() => chatMessages.id, {
+      onDelete: "set null",
+    }),
+    sql: text("sql").notNull(),
+    question: text("question").notNull(),
+
+    // Chart configuration & cached data
+    vizConfig: jsonb("viz_config").notNull(),
+    cachedData: jsonb("cached_data"),
+    lastRefreshedAt: timestamp("last_refreshed_at"),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    dashboardIdx: index("idx_pinned_charts_dashboard").on(table.dashboardId),
+    userIdx: index("idx_pinned_charts_user").on(table.userId),
+  })
+);
+
+// ============================================
+// RELATIONS
+// ============================================
+export const chatSessionsRelations = relations(
+  chatSessions,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [chatSessions.userId],
+      references: [users.id],
+    }),
+    connection: one(databaseConnections, {
+      fields: [chatSessions.connectionId],
+      references: [databaseConnections.id],
+    }),
+    messages: many(chatMessages),
+  })
+);
+
+export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
+  session: one(chatSessions, {
+    fields: [chatMessages.sessionId],
+    references: [chatSessions.id],
+  }),
+}));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  accounts: many(accounts),
+  sessions: many(sessions),
+  connections: many(databaseConnections),
+  chatSessions: many(chatSessions),
+  subscriptions: many(subscriptions),
+  usage: many(usageTracking),
+}));
+
+export const databaseConnectionsRelations = relations(
+  databaseConnections,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [databaseConnections.userId],
+      references: [users.id],
+    }),
+    chatSessions: many(chatSessions),
+  })
+);
+
+export const accountsRelations = relations(accounts, ({ one }) => ({
+  user: one(users, {
+    fields: [accounts.userId],
+    references: [users.id],
+  }),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, {
+    fields: [sessions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [subscriptions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const usageTrackingRelations = relations(usageTracking, ({ one }) => ({
+  user: one(users, {
+    fields: [usageTracking.userId],
+    references: [users.id],
+  }),
+}));
