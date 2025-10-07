@@ -304,7 +304,7 @@ export default function LandingPage() {
               </ul>
 
               <Link
-                href="/signup"
+                href="/auth/signup"
                 className="block w-full text-center py-3 px-6 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
               >
                 Get Started Free
@@ -355,7 +355,7 @@ export default function LandingPage() {
               </ul>
 
               <Link
-                href="/signup"
+                href="/auth/signup"
                 className="block w-full text-center py-3 px-6 bg-white text-emerald-600 rounded-lg hover:bg-emerald-50 transition-colors font-bold"
               >
                 Start 14-Day Trial
@@ -419,7 +419,7 @@ export default function LandingPage() {
               </ul>
 
               <Link
-                href="/signup"
+                href="/auth/signup"
                 className="block w-full text-center py-3 px-6 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
               >
                 Start Free Trial
