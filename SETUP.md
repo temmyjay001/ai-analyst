@@ -1,4 +1,4 @@
-# Dbstuff.ai - Setup Instructions
+# WhoPrompt - Setup Instructions
 
 ## Prerequisites
 

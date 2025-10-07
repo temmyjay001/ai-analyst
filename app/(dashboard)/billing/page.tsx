@@ -91,7 +91,7 @@ export default function BillingPage() {
 
   const handleContactSales = () => {
     window.location.href =
-      "mailto:sales@dbstuff.ai?subject=Enterprise Plan Inquiry";
+      "mailto:sales@dw?subject=Enterprise Plan Inquiry";
   };
 
   if (loading) {

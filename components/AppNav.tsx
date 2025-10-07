@@ -47,7 +47,7 @@ export default function AppNav() {
               <Database className="h-5 w-5 text-white" />
             </div>
             <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">
-              Dbstuff.ai
+              WhoPrompt
             </span>
           </Link>
 

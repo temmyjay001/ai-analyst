@@ -1,8 +1,8 @@
-# Stripe Setup Guide for Dbstuff.ai
+# Stripe Setup Guide for WhoPrompt
 
 ## Prerequisites
 - Stripe account (sign up at https://stripe.com)
-- Dbstuff.ai running locally or deployed
+- WhoPrompt running locally or deployed
 
 ## Step 1: Get API Keys
 
@@ -17,7 +17,7 @@
 1. Go to https://dashboard.stripe.com/test/products
 2. Click "Add product"
 3. Fill in:
-   - **Name**: Dbstuff.ai Starter
+   - **Name**: WhoPrompt Starter
    - **Description**: 100 queries/day, 3 database connections, 30-day history
    
 4. **Monthly Price**:
@@ -40,7 +40,7 @@
 
 1. Click "Add product" again
 2. Fill in:
-   - **Name**: Dbstuff.ai Growth
+   - **Name**: WhoPrompt Growth
    - **Description**: 500 queries/day, 10 database connections, 90-day history
    
 3. **Monthly Price**:

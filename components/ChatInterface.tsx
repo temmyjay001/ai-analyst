@@ -12,6 +12,7 @@ import StreamingMessage from "./StreamingMessage";
 import { ChatMessage, ChatSession } from "@/types/chat";
 import EmptyState from "./EmptyState";
 import { BillingUpgrade } from "./BillingUpgrade";
+import ChatInput from "./ChatInput";
 
 interface ChatInterfaceProps {
   sessionId?: string;
@@ -440,7 +441,19 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       </div>
 
       {/* Input */}
-      <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+      <ChatInput
+        input={input}
+        loading={streaming || deepAnalyzing}
+        onInputChange={(value) => setInput(value)}
+        onSubmit={handleSubmit}
+        disabled={streaming || deepAnalyzing || !selectedConnection}
+        placeholder={
+          selectedConnection
+            ? "Ask a question about your data..."
+            : "Select a database connection first"
+        }
+      />
+      {/* <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             type="text"
@@ -468,7 +481,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             )}
           </button>
         </form>
-      </div>
+      </div> */}
     </div>
   );
 }
