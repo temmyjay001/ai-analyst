@@ -25,12 +25,12 @@ export const db = drizzle(client, { schema });
 export { client };
 
 // Types for easier use
-export type User = typeof schema.users.$inferSelect;
-export type NewUser = typeof schema.users.$inferInsert;
-export type DatabaseConnection = typeof schema.databaseConnections.$inferSelect;
-export type NewDatabaseConnection =
-  typeof schema.databaseConnections.$inferInsert;
-export type Query = typeof schema.queries.$inferSelect;
-export type NewQuery = typeof schema.queries.$inferInsert;
-export type Subscription = typeof schema.subscriptions.$inferSelect;
-export type NewSubscription = typeof schema.subscriptions.$inferInsert;
+// export type User = typeof schema.users.$inferSelect;
+// export type NewUser = typeof schema.users.$inferInsert;
+// export type DatabaseConnection = typeof schema.databaseConnections.$inferSelect;
+// export type NewDatabaseConnection =
+//   typeof schema.databaseConnections.$inferInsert;
+// // export type Query = typeof schema.queries.$inferSelect;
+// // export type NewQuery = typeof schema.queries.$inferInsert;
+// export type Subscription = typeof schema.subscriptions.$inferSelect;
+// export type NewSubscription = typeof schema.subscriptions.$inferInsert;

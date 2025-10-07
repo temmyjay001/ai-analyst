@@ -302,9 +302,10 @@ export default function LandingPage() {
       </section>
 
       {/* Dashboard Feature Spotlight */}
-      <section className="py-20 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-gray-800 dark:via-gray-850 dark:to-gray-900">
+      <section className="py-20 bg-gray-50 dark:bg-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
+            {/* Left Column - Content */}
             <div>
               <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-600 text-white mb-6">
                 <Zap className="h-3 w-3 mr-1" />
@@ -316,16 +317,16 @@ export default function LandingPage() {
                   in Seconds
                 </span>
               </h2>
-              <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
+              <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
                 Stop switching between queries. Pin your most important charts
                 to custom dashboards and monitor everything that matters in one
                 place.
               </p>
 
               <div className="space-y-4 mb-8">
-                <div className="flex items-start">
+                <div className="flex items-start group">
                   <div className="flex-shrink-0">
-                    <div className="h-10 w-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center">
+                    <div className="h-10 w-10 bg-emerald-100 dark:bg-emerald-900/50 rounded-lg flex items-center justify-center group-hover:bg-emerald-200 dark:group-hover:bg-emerald-900/70 transition-colors">
                       <Pin className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     </div>
                   </div>
@@ -340,9 +341,9 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                <div className="flex items-start">
+                <div className="flex items-start group">
                   <div className="flex-shrink-0">
-                    <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                    <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/50 rounded-lg flex items-center justify-center group-hover:bg-blue-200 dark:group-hover:bg-blue-900/70 transition-colors">
                       <RefreshCw className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
                   </div>
@@ -357,9 +358,9 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                <div className="flex items-start">
+                <div className="flex items-start group">
                   <div className="flex-shrink-0">
-                    <div className="h-10 w-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                    <div className="h-10 w-10 bg-purple-100 dark:bg-purple-900/50 rounded-lg flex items-center justify-center group-hover:bg-purple-200 dark:group-hover:bg-purple-900/70 transition-colors">
                       <Grid3x3 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                     </div>
                   </div>
@@ -377,51 +378,67 @@ export default function LandingPage() {
 
               <Link
                 href="/auth/signup"
-                className="inline-flex items-center bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-3 rounded-lg font-semibold transition-colors"
+                className="inline-flex items-center bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-3 rounded-lg font-semibold transition-colors shadow-lg hover:shadow-xl"
               >
                 Start Building Dashboards
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </div>
 
-            {/* Dashboard Preview Mockup */}
+            {/* Right Column - Dashboard Preview Mockup */}
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-cyan-400 rounded-2xl transform rotate-3 opacity-20"></div>
+              {/* Background glow effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-cyan-400 dark:from-emerald-600 dark:to-cyan-600 rounded-2xl transform rotate-3 opacity-10 dark:opacity-20 blur-xl"></div>
+
+              {/* Main dashboard card */}
               <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 border border-gray-200 dark:border-gray-700">
+                {/* Dashboard header */}
                 <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                   <div className="flex items-center gap-2">
-                    <LayoutDashboard className="h-5 w-5 text-emerald-600" />
+                    <LayoutDashboard className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     <span className="font-semibold text-gray-900 dark:text-white">
                       Sales Dashboard
                     </span>
-                    <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded-full">
+                    <span className="text-xs bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
                       4 charts
                     </span>
                   </div>
-                  <div className="flex gap-1">
-                    <div className="h-2 w-2 bg-red-500 rounded-full"></div>
-                    <div className="h-2 w-2 bg-yellow-500 rounded-full"></div>
-                    <div className="h-2 w-2 bg-green-500 rounded-full"></div>
+                  {/* Mac-style window buttons */}
+                  <div className="flex gap-1.5">
+                    <div className="h-3 w-3 bg-red-500 rounded-full"></div>
+                    <div className="h-3 w-3 bg-yellow-500 rounded-full"></div>
+                    <div className="h-3 w-3 bg-green-500 rounded-full"></div>
                   </div>
                 </div>
 
-                {/* Mockup Grid */}
+                {/* Mockup Grid - 2x2 chart grid */}
                 <div className="grid grid-cols-2 gap-4">
                   {[1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
-                      className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-750 rounded-lg p-4 border border-gray-200 dark:border-gray-600"
+                      className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all hover:shadow-md"
                     >
+                      {/* Chart header */}
                       <div className="flex items-center justify-between mb-3">
-                        <div className="h-3 w-20 bg-gray-300 dark:bg-gray-600 rounded"></div>
-                        <BarChart3 className="h-4 w-4 text-gray-400" />
+                        <div className="h-3 w-20 bg-gray-300 dark:bg-gray-600 rounded animate-pulse"></div>
+                        <BarChart3 className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                       </div>
+
+                      {/* Chart visualization mockup */}
                       <div className="space-y-2">
-                        <div className="h-12 bg-gradient-to-t from-emerald-200 to-emerald-100 dark:from-emerald-900 dark:to-emerald-800 rounded"></div>
+                        <div className="h-16 bg-gradient-to-t from-emerald-200 to-emerald-100 dark:from-emerald-900/40 dark:to-emerald-800/40 rounded border border-emerald-300 dark:border-emerald-700/50"></div>
                         <div className="h-2 w-16 bg-gray-300 dark:bg-gray-600 rounded"></div>
                       </div>
                     </div>
                   ))}
+                </div>
+
+                {/* Dashboard footer with action hint */}
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                  <span>Last updated: 2 mins ago</span>
+                  <button className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-medium transition-colors">
+                    Refresh all →
+                  </button>
                 </div>
               </div>
             </div>

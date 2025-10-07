@@ -11,7 +11,7 @@ import {
   ConnectionConfig,
 } from "@/lib/database/factory";
 import { streamInterpretation } from "@/lib/ai/gemini-streaming";
-import { authOptions } from "../../auth/[...nextauth]/route";
+import { authOptions } from "@/lib/authOptions";
 
 const PLAN_LIMITS = {
   free: 3,
