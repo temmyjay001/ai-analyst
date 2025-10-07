@@ -1,7 +1,7 @@
 // app/api/dashboards/charts/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../auth/[...nextauth]/route";
+import { authOptions } from "@/lib/authOptions";
 import { db } from "@/lib/db";
 import { pinnedCharts, users } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";

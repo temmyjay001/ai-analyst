@@ -1,11 +1,11 @@
 // app/api/billing/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { users, subscriptions } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { stripe } from "@/lib/stripe";
+import { authOptions } from "@/lib/authOptions";
 
 export async function GET(req: NextRequest) {
   try {
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       .limit(1);
 
     let subscriptionData = null;
-    let invoices = [];
+    let invoices: any[] = [];
 
     if (subscription[0] && subscription[0].stripeCustomerId) {
       // Get subscription details from Stripe

@@ -1,7 +1,7 @@
 // app/api/sessions/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth/[...nextauth]/route";
+import { authOptions } from "@/lib/authOptions";
 import { db } from "@/lib/db";
 import { chatSessions, chatMessages, users } from "@/lib/schema";
 import { eq, and, asc } from "drizzle-orm";
@@ -69,7 +69,7 @@ export async function GET(
 // DELETE - Delete a session
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -88,7 +88,7 @@ export async function DELETE(
       return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
-    const sessionId = params.id;
+    const sessionId = (await params).id;
 
     // Delete session (messages cascade delete automatically)
     const result = await db
@@ -118,7 +118,7 @@ export async function DELETE(
 // PATCH - Update session title
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -143,7 +143,7 @@ export async function PATCH(
       return NextResponse.json({ message: "Invalid title" }, { status: 400 });
     }
 
-    const sessionId = params.id;
+    const sessionId = (await params).id;
 
     const result = await db
       .update(chatSessions)

@@ -1,11 +1,11 @@
 // app/api/billing/checkout/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { users, subscriptions } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { stripe, getStripePriceId } from "@/lib/stripe";
+import { authOptions } from "@/lib/authOptions";
 
 export async function POST(req: NextRequest) {
   try {

@@ -1,11 +1,11 @@
 // app/api/connections/[id]/route.ts - WITH CACHE INVALIDATION
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { databaseConnections, users } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { schemaCache } from "@/lib/schemaCache";
+import { authOptions } from "@/lib/authOptions";
 
 export async function DELETE(
   req: NextRequest,
