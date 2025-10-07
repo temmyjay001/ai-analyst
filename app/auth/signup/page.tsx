@@ -1,11 +1,10 @@
-// app/auth/signup/page.tsx
 "use client";
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Database, Eye, EyeOff, Loader2, Check, X } from "lucide-react";
+import { Database, Eye, EyeOff, Loader2, Check, X, Mail } from "lucide-react";
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
@@ -17,7 +16,9 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showVerificationMessage, setShowVerificationMessage] = useState(false);
   const [passwordValidation, setPasswordValidation] = useState({
     length: false,
     uppercase: false,
@@ -50,10 +51,22 @@ export default function SignUpPage() {
     formData.password === formData.confirmPassword &&
     formData.confirmPassword !== "";
 
+  const handleGoogleSignUp = async () => {
+    setIsGoogleLoading(true);
+    try {
+      await signIn("google", { callbackUrl: "/app" });
+    } catch (error) {
+      console.error("Google sign up error:", error);
+      setError("Failed to sign up with Google");
+      setIsGoogleLoading(false);
+    }
+  };
+
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+    setShowVerificationMessage(false);
 
     // Validation
     if (!isPasswordValid) {
@@ -88,19 +101,9 @@ export default function SignUpPage() {
         throw new Error(data.message || "Failed to create account");
       }
 
-      // Sign in the user
-      const signInResult = await signIn("credentials", {
-        email: formData.email,
-        password: formData.password,
-        redirect: false,
-      });
-
-      if (signInResult?.error) {
-        setError(
-          "Account created but failed to sign in. Please try signing in manually."
-        );
-      } else {
-        router.push("/app");
+      // Show verification message instead of auto-signing in
+      if (data.requiresVerification) {
+        setShowVerificationMessage(true);
       }
     } catch (error: any) {
       setError(error.message || "Something went wrong. Please try again.");
@@ -109,56 +112,105 @@ export default function SignUpPage() {
     }
   };
 
-  const handleGoogleSignUp = async () => {
-    setIsLoading(true);
-    try {
-      await signIn("google", { callbackUrl: "/app" });
-    } catch (error) {
-      setError("Failed to sign up with Google");
-      setIsLoading(false);
-    }
-  };
+  // Show verification success message
+  if (showVerificationMessage) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-gray-900 dark:to-gray-800 px-4">
+        <div className="max-w-md w-full">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
+            {/* Icon */}
+            <div className="flex justify-center mb-6">
+              <div className="bg-emerald-100 dark:bg-emerald-900 rounded-full p-3">
+                <Mail className="h-12 w-12 text-emerald-600 dark:text-emerald-400" />
+              </div>
+            </div>
+
+            {/* Title */}
+            <h1 className="text-2xl font-bold text-center text-gray-900 dark:text-white mb-2">
+              Check Your Email
+            </h1>
+            <p className="text-center text-gray-600 dark:text-gray-400 mb-6">
+              We&apos;ve sent a verification link to{" "}
+              <span className="font-medium text-gray-900 dark:text-white">
+                {formData.email}
+              </span>
+            </p>
+
+            {/* Instructions */}
+            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-6">
+              <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+                To complete your registration:
+              </p>
+              <ol className="text-sm text-gray-600 dark:text-gray-400 space-y-2 list-decimal list-inside">
+                <li>Open the email we just sent you</li>
+                <li>Click the verification link</li>
+                <li>You&apos;ll be redirected to sign in</li>
+              </ol>
+            </div>
+
+            {/* Resend Link */}
+            <div className="text-center text-sm text-gray-600 dark:text-gray-400">
+              Didn&apos;t receive the email?{" "}
+              <Link
+                href="/auth/resend-verification"
+                className="font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
+              >
+                Resend verification email
+              </Link>
+            </div>
+
+            {/* Sign In Link */}
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 text-center">
+              <Link
+                href="/auth/signin"
+                className="text-sm font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
+              >
+                Back to Sign In
+              </Link>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
+            Check your spam folder if you don&apos;t see the email
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        {/* Logo */}
-        <Link href="/" className="flex items-center justify-center mb-6">
-          <div className="h-10 w-10 bg-emerald-600 rounded-lg flex items-center justify-center">
-            <Database className="h-6 w-6 text-white" />
-          </div>
-          <span className="ml-2 text-2xl font-bold text-gray-900 dark:text-white">
-            Dbstuff.ai
-          </span>
-        </Link>
-
-        <h2 className="text-center text-3xl font-bold text-gray-900 dark:text-white">
-          Create your account
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-          Already have an account?{" "}
-          <Link
-            href="/auth/signin"
-            className="font-medium text-emerald-600 hover:text-emerald-500"
-          >
-            Sign in here
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-gray-900 dark:to-gray-800 px-4">
+      <div className="max-w-md w-full space-y-8">
+        {/* Logo and Header */}
+        <div className="text-center">
+          <Link href="/" className="inline-flex items-center space-x-2 mb-6">
+            <Database className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-2xl font-bold text-gray-900 dark:text-white">
+              WhoPrompt
+            </span>
           </Link>
-        </p>
-      </div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Create your account
+          </h2>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            Start querying your databases with AI
+          </p>
+        </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white dark:bg-gray-800 py-8 px-4 shadow sm:rounded-lg sm:px-10">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
           {/* Google Sign Up */}
           <button
+            type="button"
             onClick={handleGoogleSignUp}
-            disabled={isLoading}
-            className="w-full flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isGoogleLoading}
+            className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {isLoading ? (
+            {isGoogleLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <>
-                <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
+                <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
                   <path
                     fill="currentColor"
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -283,14 +335,14 @@ export default function SignUpPage() {
                 <div className="mt-2 space-y-1">
                   <div className="flex items-center text-xs">
                     {passwordValidation.length ? (
-                      <Check className="h-3 w-3 text-green-500 mr-2" />
+                      <Check className="h-3 w-3 text-emerald-500 mr-1" />
                     ) : (
-                      <X className="h-3 w-3 text-gray-400 mr-2" />
+                      <X className="h-3 w-3 text-gray-400 mr-1" />
                     )}
                     <span
                       className={
                         passwordValidation.length
-                          ? "text-green-600 dark:text-green-400"
+                          ? "text-emerald-600 dark:text-emerald-400"
                           : "text-gray-500"
                       }
                     >
@@ -299,14 +351,14 @@ export default function SignUpPage() {
                   </div>
                   <div className="flex items-center text-xs">
                     {passwordValidation.uppercase ? (
-                      <Check className="h-3 w-3 text-green-500 mr-2" />
+                      <Check className="h-3 w-3 text-emerald-500 mr-1" />
                     ) : (
-                      <X className="h-3 w-3 text-gray-400 mr-2" />
+                      <X className="h-3 w-3 text-gray-400 mr-1" />
                     )}
                     <span
                       className={
                         passwordValidation.uppercase
-                          ? "text-green-600 dark:text-green-400"
+                          ? "text-emerald-600 dark:text-emerald-400"
                           : "text-gray-500"
                       }
                     >
@@ -315,14 +367,14 @@ export default function SignUpPage() {
                   </div>
                   <div className="flex items-center text-xs">
                     {passwordValidation.lowercase ? (
-                      <Check className="h-3 w-3 text-green-500 mr-2" />
+                      <Check className="h-3 w-3 text-emerald-500 mr-1" />
                     ) : (
-                      <X className="h-3 w-3 text-gray-400 mr-2" />
+                      <X className="h-3 w-3 text-gray-400 mr-1" />
                     )}
                     <span
                       className={
                         passwordValidation.lowercase
-                          ? "text-green-600 dark:text-green-400"
+                          ? "text-emerald-600 dark:text-emerald-400"
                           : "text-gray-500"
                       }
                     >
@@ -331,14 +383,14 @@ export default function SignUpPage() {
                   </div>
                   <div className="flex items-center text-xs">
                     {passwordValidation.number ? (
-                      <Check className="h-3 w-3 text-green-500 mr-2" />
+                      <Check className="h-3 w-3 text-emerald-500 mr-1" />
                     ) : (
-                      <X className="h-3 w-3 text-gray-400 mr-2" />
+                      <X className="h-3 w-3 text-gray-400 mr-1" />
                     )}
                     <span
                       className={
                         passwordValidation.number
-                          ? "text-green-600 dark:text-green-400"
+                          ? "text-emerald-600 dark:text-emerald-400"
                           : "text-gray-500"
                       }
                     >
@@ -382,17 +434,17 @@ export default function SignUpPage() {
               </div>
 
               {formData.confirmPassword && (
-                <div className="mt-1 flex items-center text-xs">
+                <div className="mt-2 flex items-center text-xs">
                   {passwordsMatch ? (
                     <>
-                      <Check className="h-3 w-3 text-green-500 mr-2" />
-                      <span className="text-green-600 dark:text-green-400">
+                      <Check className="h-3 w-3 text-emerald-500 mr-1" />
+                      <span className="text-emerald-600 dark:text-emerald-400">
                         Passwords match
                       </span>
                     </>
                   ) : (
                     <>
-                      <X className="h-3 w-3 text-red-500 mr-2" />
+                      <X className="h-3 w-3 text-red-500 mr-1" />
                       <span className="text-red-600 dark:text-red-400">
                         Passwords do not match
                       </span>
@@ -402,71 +454,30 @@ export default function SignUpPage() {
               )}
             </div>
 
-            <div className="flex items-center">
-              <input
-                id="terms"
-                name="terms"
-                type="checkbox"
-                required
-                className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 dark:border-gray-600 rounded"
-              />
-              <label
-                htmlFor="terms"
-                className="ml-2 block text-sm text-gray-900 dark:text-gray-300"
-              >
-                I agree to the{" "}
-                <Link
-                  href="/terms"
-                  className="text-emerald-600 hover:text-emerald-500"
-                >
-                  Terms of Service
-                </Link>{" "}
-                and{" "}
-                <Link
-                  href="/privacy"
-                  className="text-emerald-600 hover:text-emerald-500"
-                >
-                  Privacy Policy
-                </Link>
-              </label>
-            </div>
-
-            <div>
-              <button
-                type="submit"
-                disabled={isLoading || !isPasswordValid || !passwordsMatch}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Create account"
-                )}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isLoading || !isPasswordValid || !passwordsMatch}
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                "Create account"
+              )}
+            </button>
           </form>
-
-          <div className="mt-6">
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-md p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                    Start with our free plan
-                  </h3>
-                  <div className="mt-2 text-sm text-emerald-700 dark:text-emerald-300">
-                    <p>
-                      Get 10 queries per day and 1 database connection. Upgrade
-                      anytime to unlock more features.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
+
+        {/* Sign In Link */}
+        <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+          Already have an account?{" "}
+          <Link
+            href="/auth/signin"
+            className="font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
+          >
+            Sign in
+          </Link>
+        </p>
       </div>
     </div>
   );

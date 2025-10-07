@@ -73,9 +73,23 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
         token.id = user.id;
+      }
+
+      if (account?.provider === "google") {
+        try {
+          await db
+            .update(users)
+            .set({
+              emailVerified: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(users.email, token.email!));
+        } catch (error) {
+          console.error("Error auto-verifying Google user:", error);
+        }
       }
       return token;
     },
@@ -85,6 +99,16 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
       }
       return session;
+    },
+
+    async signIn({ user, account }) {
+      // Google OAuth users are auto-verified
+      if (account?.provider === "google") {
+        return true;
+      }
+
+      // For credentials, check is done in authorize
+      return true;
     },
   },
 

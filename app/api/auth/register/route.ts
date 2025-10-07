@@ -2,8 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { users } from "@/lib/schema";
+import { users, verificationTokens } from "@/lib/schema";
 import { eq } from "drizzle-orm";
+import { sendVerificationEmail } from "@/lib/email";
+import { randomBytes } from "crypto";
 
 export async function POST(req: NextRequest) {
   try {
@@ -68,7 +70,7 @@ export async function POST(req: NextRequest) {
         name: name.trim(),
         email: email.toLowerCase().trim(),
         hashedPassword,
-        emailVerified: new Date(), // Auto-verify for MVP
+        emailVerified: null,
       })
       .returning({
         id: users.id,
@@ -76,10 +78,41 @@ export async function POST(req: NextRequest) {
         email: users.email,
       });
 
+    // Generate verification token
+    const token = randomBytes(32).toString("hex");
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    // Store verification token
+    await db.insert(verificationTokens).values({
+      identifier: newUser[0].email,
+      token,
+      expires,
+    });
+
+    // Send verification email
+    const appUrl =
+      process.env.NEXTAUTH_URL ||
+      process.env.APP_URL ||
+      "http://localhost:3000";
+    const verificationUrl = `${appUrl}/auth/verify-email?token=${token}`;
+
+    try {
+      await sendVerificationEmail({
+        email: newUser[0].email,
+        name: newUser[0].name,
+        verificationUrl,
+      });
+    } catch (emailError) {
+      console.error("Failed to send verification email:", emailError);
+      // Don't fail registration if email fails - user can request resend
+    }
+
     return NextResponse.json(
       {
-        message: "User created successfully",
+        message:
+          "User created successfully. Please check your email to verify your account.",
         user: newUser[0],
+        requiresVerification: true,
       },
       { status: 201 }
     );

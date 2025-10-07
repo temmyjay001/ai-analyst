@@ -1,27 +1,46 @@
-// app/auth/signin/page.tsx
 "use client";
 
-import { useState } from "react";
-import { signIn, getSession } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Database, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Database, Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/app";
+
+  useEffect(() => {
+    // Check for verification success message
+    if (searchParams.get("verified") === "true") {
+      setSuccessMessage("Email verified successfully! You can now sign in.");
+    }
+  }, [searchParams]);
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    try {
+      await signIn("google", { callbackUrl: "/app" });
+    } catch (error) {
+      console.error("Google sign in error:", error);
+      setError("Failed to sign in with Google");
+      setIsGoogleLoading(false);
+    }
+  };
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+    setSuccessMessage("");
 
     try {
       const result = await signIn("credentials", {
@@ -31,67 +50,64 @@ export default function SignInPage() {
       });
 
       if (result?.error) {
-        setError("Invalid email or password");
-      } else {
-        router.push(callbackUrl);
+        // Handle specific error messages
+        if (result.error.includes("verify your email")) {
+          setError(result.error);
+        } else {
+          setError("Invalid email or password");
+        }
+      } else if (result?.ok) {
+        router.push("/app");
       }
-    } catch (error) {
+    } catch (error: any) {
       setError("Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    try {
-      await signIn("google", { callbackUrl });
-    } catch (error) {
-      setError("Failed to sign in with Google");
-      setIsLoading(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        {/* Logo */}
-        <Link href="/" className="flex items-center justify-center mb-6">
-          <div className="h-10 w-10 bg-emerald-600 rounded-lg flex items-center justify-center">
-            <Database className="h-6 w-6 text-white" />
-          </div>
-          <span className="ml-2 text-2xl font-bold text-gray-900 dark:text-white">
-            Dbstuff.ai
-          </span>
-        </Link>
-
-        <h2 className="text-center text-3xl font-bold text-gray-900 dark:text-white">
-          Welcome back
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/auth/signup"
-            className="font-medium text-emerald-600 hover:text-emerald-500"
-          >
-            Sign up for free
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-gray-900 dark:to-gray-800 px-4">
+      <div className="max-w-md w-full space-y-8">
+        {/* Logo and Header */}
+        <div className="text-center">
+          <Link href="/" className="inline-flex items-center space-x-2 mb-6">
+            <Database className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-2xl font-bold text-gray-900 dark:text-white">
+              WhoPrompt
+            </span>
           </Link>
-        </p>
-      </div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Welcome back
+          </h2>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            Sign in to your account to continue
+          </p>
+        </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white dark:bg-gray-800 py-8 px-4 shadow sm:rounded-lg sm:px-10">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
+          {/* Success Message */}
+          {successMessage && (
+            <div className="mb-6 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-start">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mt-0.5 mr-3 flex-shrink-0" />
+              <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                {successMessage}
+              </p>
+            </div>
+          )}
+
           {/* Google Sign In */}
           <button
+            type="button"
             onClick={handleGoogleSignIn}
-            disabled={isLoading}
-            className="w-full flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isGoogleLoading}
+            className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+            {isGoogleLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <>
-                <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
+                <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
                   <path
                     fill="currentColor"
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -130,8 +146,18 @@ export default function SignInPage() {
           {/* Email/Password Form */}
           <form className="mt-6 space-y-6" onSubmit={handleEmailSignIn}>
             {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded-md text-sm">
-                {error}
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {error}
+                </p>
+                {error.includes("verify your email") && (
+                  <Link
+                    href="/auth/resend-verification"
+                    className="mt-2 inline-block text-sm font-medium text-red-700 dark:text-red-300 hover:text-red-600 dark:hover:text-red-200 underline"
+                  >
+                    Resend verification email
+                  </Link>
+                )}
               </div>
             )}
 
@@ -191,46 +217,40 @@ export default function SignInPage() {
             </div>
 
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 dark:border-gray-600 rounded"
-                />
-                <label
-                  htmlFor="remember-me"
-                  className="ml-2 block text-sm text-gray-900 dark:text-gray-300"
-                >
-                  Remember me
-                </label>
-              </div>
-
               <div className="text-sm">
                 <Link
                   href="/auth/forgot-password"
-                  className="font-medium text-emerald-600 hover:text-emerald-500"
+                  className="font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
                 >
                   Forgot your password?
                 </Link>
               </div>
             </div>
 
-            <div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Sign in"
-                )}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                "Sign in"
+              )}
+            </button>
           </form>
         </div>
+
+        {/* Sign Up Link */}
+        <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/auth/signup"
+            className="font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
+          >
+            Sign up
+          </Link>
+        </p>
       </div>
     </div>
   );
