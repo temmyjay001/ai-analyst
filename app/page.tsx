@@ -76,7 +76,7 @@ export default function LandingPage() {
     {
       question: "How does the AI understand my questions?",
       answer:
-        "We use Google's Gemini AI to understand your natural language questions and convert them into optimized SQL queries. The AI is trained on database schemas and can interpret complex business questions, generating accurate queries even for intricate multi-table joins.",
+        "We use Artificial Intelligence (AI) to understand your natural language questions and convert them into optimized SQL queries. The AI is trained on database schemas and can interpret complex business questions, generating accurate queries even for intricate multi-table joins.",
     },
     {
       question: "What are Custom Dashboards?",

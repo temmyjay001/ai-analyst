@@ -20,7 +20,7 @@ export const users = pgTable("users", {
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   hashedPassword: varchar("hashed_password", { length: 255 }),
-  avatar: text("avatar"),
+  image: text("image"),
   emailVerified: timestamp("email_verified"),
   plan: varchar("plan", { length: 50 }).notNull().default("free"), // free, starter, growth, enterprise
   queryCount: integer("query_count").default(0),
