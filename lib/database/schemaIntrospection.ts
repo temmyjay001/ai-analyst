@@ -343,6 +343,89 @@ async function getSQLiteSchema(
   }
 }
 
+async function getMongoDBSchema(
+  config: ConnectionConfig
+): Promise<SchemaContext> {
+  const connection = createDatabaseConnection(config);
+
+  try {
+    await connection.connect();
+
+    // Get list of collections
+    const collectionsResult = await connection.query(
+      JSON.stringify({
+        collection: "",
+        operation: "listCollections",
+      })
+    );
+
+    const tables: TableSchema[] = [];
+
+    // For each collection, sample documents to infer schema
+    for (const coll of collectionsResult.rows) {
+      const sampleResult = await connection.query(
+        JSON.stringify({
+          collection: coll.name,
+          operation: "find",
+          options: { limit: 5 },
+        })
+      );
+
+      // Infer schema from samples
+      const fieldTypes = new Map<string, Set<string>>();
+
+      for (const doc of sampleResult.rows) {
+        for (const [key, value] of Object.entries(doc)) {
+          if (!fieldTypes.has(key)) {
+            fieldTypes.set(key, new Set());
+          }
+          fieldTypes.get(key)!.add(typeof value);
+        }
+      }
+
+      const columns: ColumnInfo[] = Array.from(fieldTypes.entries()).map(
+        ([name, types]) => ({
+          column: name,
+          type: Array.from(types).join(" | "), // e.g., "string | number"
+          nullable: true, // MongoDB fields are always optional
+          isPrimary: name === "_id",
+          defaultValue: undefined,
+        })
+      );
+
+      tables.push({
+        table_name: coll.name,
+        columns,
+        relationships: [], // MongoDB doesn't have enforced relationships
+      });
+    }
+
+    return {
+      tables,
+      formatted: formatMongoSchemaForAI(tables),
+    };
+  } finally {
+    await connection.disconnect();
+  }
+}
+
+function formatMongoSchemaForAI(tables: TableSchema[]): string {
+  return tables
+    .map(
+      (table) => `
+Collection: ${table.table_name}
+Fields (inferred from samples):
+${table.columns
+  .map(
+    (col) =>
+      `  - ${col.column}: ${col.type}${col.isPrimary ? " (Primary Key)" : ""}`
+  )
+  .join("\n")}
+  `
+    )
+    .join("\n");
+}
+
 // Format schema for AI consumption
 function formatSchemaForAI(
   tables: TableSchema[],

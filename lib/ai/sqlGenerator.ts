@@ -174,7 +174,7 @@ export function getDatabaseExamples(dbType: DatabaseType): string {
         LIMIT 20;`,
   };
 
-  return examples[dbType] || "";
+  return examples[dbType as Exclude<DatabaseType, "mongodb">] || "";
 }
 
 /**
@@ -190,10 +190,10 @@ export function getVisualizationGuidance(dbType: DatabaseType): string {
     - Line: date/time column + numeric metric
     - Use meaningful column aliases
     4. **ALWAYS ADD ORDER BY** for meaningful visualizations
-    5. **LIMIT RESULTS**: 20 for bar/pie, 100 for time series
+    5. **LIMIT RESULTS**: 20 for bar/pie, 100 for time-series
     `;
 
-  const dbSpecific = {
+  const dbSpecific: Record<Exclude<DatabaseType, "mongodb">, string> = {
     postgresql: `
         PostgreSQL-specific tips:
         - Use LIMIT for result limiting
@@ -219,7 +219,10 @@ export function getVisualizationGuidance(dbType: DatabaseType): string {
         - Use julianday() for date calculations`,
   };
 
-  return baseGuidance + (dbSpecific[dbType] || "");
+  return (
+    baseGuidance +
+    (dbSpecific[dbType as Exclude<DatabaseType, "mongodb">] || "")
+  );
 }
 
 /**

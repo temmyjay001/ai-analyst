@@ -3,9 +3,15 @@ import { Client as PgClient } from "pg";
 import mysql from "mysql2/promise";
 import sql from "mssql";
 import Database from "better-sqlite3";
+import { MongoClient, Db } from "mongodb";
 import { decrypt } from "@/lib/encryption";
 
-export type DatabaseType = "postgresql" | "mysql" | "mssql" | "sqlite";
+export type DatabaseType =
+  | "postgresql"
+  | "mysql"
+  | "mssql"
+  | "sqlite"
+  | "mongodb";
 
 export interface ConnectionConfig {
   id: string;
@@ -302,6 +308,98 @@ class SQLiteConnection implements DatabaseConnection {
   }
 }
 
+class MongoDBConnection implements DatabaseConnection {
+  private client: MongoClient | null = null;
+  private db: Db | null = null;
+  private readonly connectionString: string;
+
+  constructor(config: ConnectionConfig) {
+    if (config.connectionUrlEncrypted) {
+      this.connectionString = decrypt(config.connectionUrlEncrypted);
+    } else {
+      const password = config.passwordEncrypted
+        ? encodeURIComponent(decrypt(config.passwordEncrypted))
+        : "";
+      this.connectionString = `mongodb://${config.username}:${password}@${
+        config.host
+      }:${config.port || 27017}/${config.database}`;
+    }
+  }
+
+  async connect(): Promise<void> {
+    this.client = new MongoClient(this.connectionString);
+    await this.client.connect();
+    this.db = this.client.db();
+  }
+
+  async query(queryJson: string): Promise<QueryResult> {
+    // MongoDB doesn't use SQL - it uses JSON queries
+    // Expected format: { "collection": "users", "operation": "find", "query": {...}, "options": {...} }
+
+    if (!this.db) throw new Error("Not connected");
+
+    try {
+      const {
+        collection,
+        operation,
+        query = {},
+        options = {},
+      } = JSON.parse(queryJson);
+      const coll = this.db.collection(collection);
+
+      let results: any[];
+
+      switch (operation) {
+        case "find":
+          results = await coll.find(query, options).toArray();
+          break;
+        case "aggregate":
+          results = await coll.aggregate(query).toArray();
+          break;
+        case "count":
+          const count = await coll.countDocuments(query);
+          results = [{ count }];
+          break;
+        default:
+          throw new Error(`Unsupported operation: ${operation}`);
+      }
+
+      return {
+        rows: results,
+        rowCount: results.length,
+        fields:
+          results.length > 0
+            ? Object.keys(results[0]).map((key) => ({
+                name: key,
+                dataType: typeof results[0][key],
+              }))
+            : undefined,
+      };
+    } catch (error: any) {
+      throw new Error(`MongoDB query error: ${error.message}`);
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.client) {
+      await this.client.close();
+      this.client = null;
+      this.db = null;
+    }
+  }
+
+  async testConnection(): Promise<boolean> {
+    try {
+      await this.connect();
+      await this.db?.admin().ping();
+      await this.disconnect();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 // Factory function
 export function createDatabaseConnection(
   config: ConnectionConfig
@@ -315,6 +413,8 @@ export function createDatabaseConnection(
       return new MSSQLConnection(config);
     case "sqlite":
       return new SQLiteConnection(config);
+    case "mongodb":
+      return new MongoDBConnection(config);
     default:
       throw new Error(`Unsupported database type: ${config.type}`);
   }

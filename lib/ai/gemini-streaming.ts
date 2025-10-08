@@ -64,6 +64,84 @@ export async function* streamSQL(
   }
 }
 
+export async function* streamMongoQuery(
+  question: string,
+  schemaContext: string,
+  userPlan: string
+): AsyncGenerator<string> {
+  const model = genAI.getGenerativeModel({
+    model: getModelForPlan(userPlan),
+  });
+
+  const prompt = `You are an expert MongoDB query generator.
+
+USER QUESTION: "${question}"
+
+MONGODB SCHEMA (collections and inferred fields):
+${schemaContext}
+
+TASK: Generate a MongoDB query operation in JSON format to answer the question.
+
+OUTPUT FORMAT (return ONLY valid JSON, no markdown):
+{
+  "collection": "collection_name",
+  "operation": "find" | "aggregate" | "count",
+  "query": { ... MongoDB query object ... },
+  "options": { "limit": 100, "sort": {...} }
+}
+
+MONGODB QUERY EXAMPLES:
+
+1. Find all documents:
+{
+  "collection": "users",
+  "operation": "find",
+  "query": {},
+  "options": {}
+}
+
+2. Find with filter:
+{
+  "collection": "users",
+  "operation": "find",
+  "query": { "age": { "$gte": 18 } },
+  "options": { "limit": 10 }
+}
+
+3. Aggregation pipeline:
+{
+  "collection": "orders",
+  "operation": "aggregate",
+  "query": [
+    { "$group": { "_id": "$status", "count": { "$sum": 1 } } },
+    { "$sort": { "count": -1 } }
+  ]
+}
+
+4. Count documents:
+{
+  "collection": "products",
+  "operation": "count",
+  "query": { "price": { "$gt": 100 } }
+}
+
+RULES:
+- Use MongoDB operators: $eq, $gt, $gte, $lt, $lte, $in, $regex, etc.
+- For aggregations, use $group, $match, $sort, $project, $limit
+- Always include reasonable limits (100-1000) for find operations
+- Use _id for the primary key field
+- Handle dates with ISODate format
+- Return ONLY the JSON, no explanation
+
+Generate the MongoDB query now:`;
+
+  const result = await model.generateContentStream(prompt);
+
+  for await (const chunk of result.stream) {
+    yield chunk.text();
+  }
+}
+
 /**
  * Stream interpretation word by word
  */
