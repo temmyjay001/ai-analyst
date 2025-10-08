@@ -19,7 +19,7 @@ export async function sendVerificationEmail({
 }: SendVerificationEmailParams) {
   try {
     const { data, error } = await resend.emails.send({
-      from: "WhoPrompt <noreply@whoprompt.com>",
+      from: "WhoPrompt <noreply@mail.whoprompt.com>",
       to: email,
       subject: "Verify your email address",
       text: `Hi ${name},
@@ -63,7 +63,7 @@ export async function sendPasswordResetEmail({
 }) {
   try {
     const { data, error } = await resend.emails.send({
-      from: "WhoPrompt <noreply@whoprompt.com>",
+      from: "WhoPrompt <noreply@mail.whoprompt.com>",
       to: email,
       subject: "Reset your password",
       text: `Hi ${name},
