@@ -51,3 +51,58 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+// POST - Create new session
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    const user = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, session.user.email))
+      .limit(1);
+
+    if (!user[0]) {
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
+    }
+
+    const { connectionId, title } = await req.json();
+
+    if (!connectionId) {
+      return NextResponse.json(
+        { message: "Connection ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // Create title from first message or use default
+    const sessionTitle = title || "New Chat";
+
+    // Create new session
+    const newSession = await db
+      .insert(chatSessions)
+      .values({
+        userId: user[0].id,
+        connectionId,
+        title: sessionTitle,
+        messageCount: 0,
+      })
+      .returning();
+
+    return NextResponse.json({
+      success: true,
+      session: newSession[0],
+    });
+  } catch (error) {
+    console.error("Session creation error:", error);
+    return NextResponse.json(
+      { message: "Failed to create session" },
+      { status: 500 }
+    );
+  }
+}

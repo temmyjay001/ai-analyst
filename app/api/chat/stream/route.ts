@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     const { question, connectionId, sessionId } = await req.json();
 
-    if (!question || !connectionId) {
+    if (!question || !connectionId || !sessionId) {
       return new Response("Missing required fields", { status: 400 });
     }
 
@@ -133,66 +133,41 @@ export async function POST(req: NextRequest) {
               message: "Loading from cache...",
             });
 
-            // Handle session creation if needed
-            let currentSessionId = sessionId;
-            let currentSession;
-
-            if (!sessionId) {
-              // Create new session for cached result
-              const title =
-                question.length > 50
-                  ? question.substring(0, 50) + "..."
-                  : question;
-
-              const newSession = await db
-                .insert(chatSessions)
-                .values({
-                  userId,
-                  connectionId,
-                  title,
-                  messageCount: 0,
-                })
-                .returning();
-
-              currentSessionId = newSession[0].id;
-              currentSession = newSession;
-
-              send("session_created", { sessionId: currentSessionId });
-            } else {
-              currentSession = await db
-                .select()
-                .from(chatSessions)
-                .where(
-                  and(
-                    eq(chatSessions.id, sessionId),
-                    eq(chatSessions.userId, userId)
-                  )
+            const currentSession = await db
+              .select()
+              .from(chatSessions)
+              .where(
+                and(
+                  eq(chatSessions.id, sessionId),
+                  eq(chatSessions.userId, userId)
                 )
-                .limit(1);
+              )
+              .limit(1);
 
-              if (!currentSession[0]) {
-                send("error", { message: "Session not found" });
-                controller.close();
-                return;
-              }
+            if (!currentSession[0]) {
+              send("error", { message: "Session not found" });
+              controller.close();
+              return;
+            }
 
-              if (!isMultiTurnAllowed) {
-                send("error", {
-                  message:
-                    "Multi-turn conversations require Growth plan or higher",
-                  upgradeRequired: true,
-                  requiredPlan: "growth",
-                });
-                controller.close();
-                return;
-              }
+            const isMultiTurnRequest = currentSession[0].messageCount > 0;
+
+            if (isMultiTurnRequest && !isMultiTurnAllowed) {
+              send("error", {
+                message:
+                  "Multi-turn conversations require Growth plan or higher",
+                upgradeRequired: true,
+                requiredPlan: "growth",
+              });
+              controller.close();
+              return;
             }
 
             // Save user message
             const userMessage = await db
               .insert(chatMessages)
               .values({
-                sessionId: currentSessionId,
+                sessionId: currentSession[0].id,
                 role: "user",
                 content: question,
               })
@@ -211,7 +186,7 @@ export async function POST(req: NextRequest) {
             const assistantMessage = await db
               .insert(chatMessages)
               .values({
-                sessionId: currentSessionId,
+                sessionId: currentSession[0].id,
                 role: "assistant",
                 content: cachedResult.interpretation,
                 metadata: {
@@ -233,7 +208,7 @@ export async function POST(req: NextRequest) {
                 messageCount: (currentSession[0]?.messageCount || 0) + 2,
                 updatedAt: new Date(),
               })
-              .where(eq(chatSessions.id, currentSessionId));
+              .where(eq(chatSessions.id, currentSession[0].id));
 
             // Update usage
             if (usage[0]) {
@@ -250,7 +225,7 @@ export async function POST(req: NextRequest) {
             }
 
             send("complete", {
-              sessionId: currentSessionId,
+              sessionId: currentSession[0].id,
               message: assistantMessage[0],
               fromCache: true,
               canContinue: isMultiTurnAllowed,
@@ -265,60 +240,36 @@ export async function POST(req: NextRequest) {
           // 3. CACHE MISS - CONTINUE WITH NORMAL FLOW
           // ==========================================
 
-          // Handle session
-          let currentSessionId = sessionId;
-          let currentSession;
-
-          if (sessionId) {
-            // Validate existing session
-            currentSession = await db
-              .select()
-              .from(chatSessions)
-              .where(
-                and(
-                  eq(chatSessions.id, sessionId),
-                  eq(chatSessions.userId, userId)
-                )
+          // Validate existing session
+          const currentSession = await db
+            .select()
+            .from(chatSessions)
+            .where(
+              and(
+                eq(chatSessions.id, sessionId),
+                eq(chatSessions.userId, userId)
               )
-              .limit(1);
+            )
+            .limit(1);
 
-            if (!currentSession[0]) {
-              send("error", { message: "Session not found" });
-              controller.close();
-              return;
-            }
-
-            if (!isMultiTurnAllowed) {
-              send("error", {
-                message:
-                  "Multi-turn conversations require Growth plan or higher",
-                upgradeRequired: true,
-                requiredPlan: "growth",
-              });
-              controller.close();
-              return;
-            }
-
-            currentSessionId = sessionId;
-          } else {
-            // Create new session
-            const title = question;
-
-            const newSession = await db
-              .insert(chatSessions)
-              .values({
-                userId,
-                connectionId,
-                title,
-                messageCount: 0,
-              })
-              .returning();
-
-            currentSessionId = newSession[0].id;
-            currentSession = newSession;
-
-            send("session_created", { sessionId: currentSessionId });
+          if (!currentSession[0]) {
+            send("error", { message: "Session not found" });
+            controller.close();
+            return;
           }
+          const isMultiTurnRequest = currentSession[0].messageCount > 0;
+
+          if (isMultiTurnRequest && !isMultiTurnAllowed) {
+            send("error", {
+              message: "Multi-turn conversations require Growth plan or higher",
+              upgradeRequired: true,
+              requiredPlan: "growth",
+            });
+            controller.close();
+            return;
+          }
+
+          const currentSessionId = sessionId;
 
           // Get database connection & schema
           send("status", {

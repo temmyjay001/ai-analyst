@@ -39,6 +39,9 @@ export interface MessageMetadata {
   suggestions?: string[];
   isInformational?: boolean;
   originalInput?: string;
+
+  // frontend only
+  isStreaming?: boolean;
 }
 
 export interface DeepAnalysisStep {

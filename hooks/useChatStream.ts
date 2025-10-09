@@ -6,6 +6,7 @@ import { StreamError, StreamStatus } from "@/types/chat";
 interface UseChatStreamOptions {
   onComplete?: (data: any) => void;
   onError?: (error: StreamError) => void;
+  onUserMessageSaved?: (data: any) => void;
 }
 
 export function useChatStream(options: UseChatStreamOptions = {}) {
@@ -22,14 +23,16 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
   const [isInformational, setIsInformational] = useState(false);
 
   const streamChat = useCallback(
-    async (question: string, connectionId: string, sessionId?: string) => {
+    async (question: string, connectionId: string, sessionId: string) => {
       setStreaming(true);
       setStatus(null);
       setSqlChunks([]);
       setInterpretationChunks([]);
       setResults(null);
+      setSuggestions([]);
       setError(null);
       setShowError(false);
+      setIsInformational(false);
 
       try {
         const response = await fetch("/api/chat/stream", {
@@ -83,7 +86,7 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
 
         setError(streamError);
         setShowError(true);
-        options.onError?.(err.message);
+        options.onError?.(streamError);
       } finally {
         setStreaming(false);
       }
@@ -98,12 +101,9 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
           setStatus(data);
           break;
 
-        case "session_created":
-          // Handle new session creation
-          break;
-
         case "user_message":
-          // User message saved
+          // User message saved - notify parent to update the temp user message with real ID
+          options.onUserMessageSaved?.(data);
           break;
 
         case "sql_chunk":

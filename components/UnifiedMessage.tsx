@@ -1,4 +1,4 @@
-// components/UnifiedMessage.tsx
+// components/UnifiedMessage.tsx - Enhanced for Optimistic Updates
 "use client";
 
 import {
@@ -37,7 +37,7 @@ interface UnifiedMessageProps {
   onDeepAnalysis?: () => void;
   onRetrySuccess?: (newMessage: ChatMessage) => void;
 
-  // For streaming messages
+  // For streaming messages (when message.metadata.isStreaming === true)
   isStreaming?: boolean;
   status?: StreamStatus | null;
   streamingSql?: string;
@@ -75,11 +75,26 @@ export default function UnifiedMessage({
   const isUser = message?.role === "user";
   const isAssistant = message?.role === "assistant" || isStreaming;
 
-  // Extract data from either message or streaming props
-  const sql = message?.metadata?.sql || streamingSql;
-  const interpretation = message?.content || streamingInterpretation;
-  const results = message?.metadata?.results || streamingResults;
-  const suggestions = message?.metadata?.suggestions || streamingSuggestions;
+  // For streaming messages in the array, prioritize streaming props over message data
+  // For saved messages, use message data
+  const isActivelyStreaming = isStreaming || message?.metadata?.isStreaming;
+
+  const sql = isActivelyStreaming
+    ? streamingSql || message?.metadata?.sql
+    : message?.metadata?.sql;
+
+  const interpretation = isActivelyStreaming
+    ? streamingInterpretation || message?.content
+    : message?.content;
+
+  const results = isActivelyStreaming
+    ? streamingResults || message?.metadata?.results
+    : message?.metadata?.results;
+
+  const suggestions = isActivelyStreaming
+    ? streamingSuggestions || message?.metadata?.suggestions
+    : message?.metadata?.suggestions;
+
   const hasError = !!message?.metadata?.error || !!error;
   const errorMessage = message?.metadata?.error || error?.message;
   const isInformational = message?.metadata?.isInformational;
@@ -119,8 +134,8 @@ export default function UnifiedMessage({
         </div>
       </div>
       <div className="flex-1 space-y-4">
-        {/* Status Indicator - Only show while streaming */}
-        {isStreaming && status && !error && (
+        {/* Status Indicator - Only show while actively streaming */}
+        {isActivelyStreaming && status && !error && (
           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>{status.message}</span>
@@ -140,6 +155,7 @@ export default function UnifiedMessage({
               <button
                 onClick={() => handleCopy(sql)}
                 className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                title="Copy SQL"
               >
                 {copied ? (
                   <Check className="h-4 w-4 text-green-600" />
@@ -184,45 +200,58 @@ export default function UnifiedMessage({
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <Markdown content={interpretation} />
             </div>
-            {/* Typing indicator for streaming */}
-            {isStreaming && (
+            {/* Typing indicator for actively streaming */}
+            {isActivelyStreaming && (
               <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1" />
             )}
           </div>
         )}
 
         {/* Visualizations - Only for saved messages with results */}
-        {message && results && results.length > 0 && sql && !hasError && (
-          <DataVisualization
-            data={results}
-            chartMetadata={{
-              question: userQuestion || "Query results",
-              sql: sql,
-              connectionId: session?.connectionId ?? "",
-              sessionId: message.sessionId,
-              messageId: message.id,
-            }}
-          />
-        )}
+        {message &&
+          !isActivelyStreaming &&
+          results &&
+          results.length > 0 &&
+          sql &&
+          !hasError && (
+            <DataVisualization
+              data={results}
+              chartMetadata={{
+                question: userQuestion || "Query results",
+                sql: sql,
+                connectionId: session?.connectionId ?? "",
+                sessionId: message.sessionId,
+                messageId: message.id,
+              }}
+            />
+          )}
 
         {/* Results Table - Only for saved messages with results */}
-        {message && results && results.length > 0 && !hasError && (
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 border border-green-200 dark:border-green-800">
-            <div className="flex items-center gap-2 mb-3">
-              <Database className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Query returned {message.metadata?.rowCount} rows
-              </span>
+        {message &&
+          !isActivelyStreaming &&
+          results &&
+          results.length > 0 &&
+          !hasError && (
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 border border-green-200 dark:border-green-800">
+              <div className="flex items-center gap-2 mb-3">
+                <Database className="h-4 w-4 text-green-600" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Query returned {message.metadata?.rowCount || results.length}{" "}
+                  rows
+                </span>
+              </div>
+              <ResultsTable
+                results={results}
+                onExport={() =>
+                  ExportUtils.downloadCSV(results, "query-results")
+                }
+              />
             </div>
-            <ResultsTable
-              results={results}
-              onExport={() => ExportUtils.downloadCSV(results, "query-results")}
-            />
-          </div>
-        )}
+          )}
 
         {/* Deep Analysis Button - Only for saved messages */}
         {message &&
+          !isActivelyStreaming &&
           onDeepAnalysis &&
           results &&
           results.length > 0 &&
@@ -231,11 +260,11 @@ export default function UnifiedMessage({
             <DeepAnalysisButton onClick={onDeepAnalysis} />
           )}
 
-        {/* Follow-up Suggestions - Only for multi-turn users, saved messages, not streaming */}
+        {/* Follow-up Suggestions - Only for saved messages, not streaming */}
         {canShowSuggestions &&
           suggestions &&
           suggestions.length > 0 &&
-          !isStreaming && (
+          !isActivelyStreaming && (
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
               <div className="flex items-center gap-2 mb-3">
                 <MessageCircleMore className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -287,7 +316,7 @@ export default function UnifiedMessage({
                 )}
 
                 {/* Dismiss button for streaming errors */}
-                {isStreaming && onDismissError && (
+                {isActivelyStreaming && onDismissError && (
                   <Button size="sm" variant="outline" onClick={onDismissError}>
                     Dismiss
                   </Button>

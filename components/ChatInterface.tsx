@@ -1,4 +1,4 @@
-// components/ChatInterface.tsx - Updated to use UnifiedMessage
+// components/ChatInterface.tsx - Complete Clean Refactor
 "use client";
 
 import { useState, useEffect, useRef, FormEvent, useCallback } from "react";
@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation";
 import { Loader2, Brain, Crown } from "lucide-react";
 import { useChatStream } from "@/hooks/useChatStream";
 import { useDeepAnalysisStream } from "@/hooks/useDeepAnalysisStream";
-import UnifiedMessage from "./UnifiedMessage"; // NEW: Unified component
+import UnifiedMessage from "./UnifiedMessage";
 import { ChatMessage, ChatSession } from "@/types/chat";
 import EmptyState from "./EmptyState";
 import ChatInput from "./ChatInput";
-import { useUserStore } from "@/store/userStore"; // Import userStore
+import { useUserStore } from "@/store/userStore";
 import { MULTI_TURN_PLANS } from "@/lib/constants";
 import { BillingUpgrade } from "./BillingUpgrade";
 
@@ -26,7 +26,12 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const [selectedConnection, setSelectedConnection] = useState<string>("");
   const [connections, setConnections] = useState<any[]>([]);
   const [loadingSession, setLoadingSession] = useState(false);
+  const [creatingSession, setCreatingSession] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Track streaming message IDs
+  const streamingUserMsgId = useRef<string | null>(null);
+  const streamingAssistantMsgId = useRef<string | null>(null);
 
   const userPlan = useUserStore((state) => state.plan);
 
@@ -44,18 +49,30 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     streamChat,
     clearError,
   } = useChatStream({
-    onComplete: (data) => {
-      // Navigate to new session if created
-      if (!sessionId && data.sessionId) {
-        router.push(`/app/${data.sessionId}`);
-        return;
+    onUserMessageSaved: (data) => {
+      // Replace temp user message with real saved one
+      if (data.message && streamingUserMsgId.current) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === streamingUserMsgId.current ? data.message : msg
+          )
+        );
       }
+    },
+    onComplete: (data) => {
+      // Replace streaming assistant message with saved one
+      if (data.message && streamingAssistantMsgId.current) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === streamingAssistantMsgId.current ? data.message : msg
+          )
+        );
 
-      // For existing sessions, just add the message to state
-      if (data.message && sessionId) {
-        setMessages((prev) => [...prev, data.message]);
+        // Clear streaming refs
+        streamingUserMsgId.current = null;
+        streamingAssistantMsgId.current = null;
 
-        // Update session message count locally
+        // Update session message count
         if (session) {
           setSession({
             ...session,
@@ -95,26 +112,81 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         })
       );
 
-      // Optionally reload messages to show deep analysis results
       if (sessionId) {
-        loadSessionMessages(sessionId);
+        loadSession(sessionId);
       }
     },
   });
 
+  // Fetch connections on mount
   useEffect(() => {
     fetchConnections();
   }, []);
 
+  // Handle session changes - THE KEY LOGIC
   useEffect(() => {
-    if (sessionId) {
-      loadSession(sessionId);
-    } else {
+    if (!sessionId) {
+      // No session - show empty state
       setSession(null);
       setMessages([]);
+      return;
+    }
+
+    // Check if this is a brand new session with a pending first message
+    const newMessageData = sessionStorage.getItem("newMessage");
+
+    if (newMessageData) {
+      // This is a brand new session - DON'T load from database
+      sessionStorage.removeItem("newMessage");
+
+      const { question, connectionId } = JSON.parse(newMessageData);
+
+      // Set session info (we know the ID already)
+      setSession({
+        id: sessionId,
+        title: question.substring(0, 100),
+        connectionId: connectionId,
+        messageCount: 0,
+      } as ChatSession);
+
+      // Add optimistic messages
+      const timestamp = Date.now();
+      const userMsgId = `temp-user-${timestamp}`;
+      const assistantMsgId = `temp-assistant-${timestamp}`;
+
+      streamingUserMsgId.current = userMsgId;
+      streamingAssistantMsgId.current = assistantMsgId;
+
+      const tempUserMessage: ChatMessage = {
+        id: userMsgId,
+        sessionId: sessionId,
+        role: "user",
+        content: question,
+        createdAt: new Date(),
+      } as ChatMessage;
+
+      const tempAssistantMessage: ChatMessage = {
+        id: assistantMsgId,
+        sessionId: sessionId,
+        role: "assistant",
+        content: "",
+        createdAt: new Date(),
+        metadata: {
+          isStreaming: true,
+        },
+      } as ChatMessage;
+
+      setMessages([tempUserMessage, tempAssistantMessage]);
+
+      // Start streaming
+      streamChat(question, connectionId, sessionId);
+    } else {
+      // Normal session load from database
+      loadSession(sessionId);
     }
   }, [sessionId]);
 
+  // Auto-scroll
   useEffect(() => {
     scrollToBottom();
   }, [messages, streaming]);
@@ -151,15 +223,32 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     }
   };
 
-  const loadSessionMessages = async (sid: string) => {
+  const createNewSession = async (
+    connectionId: string,
+    firstQuestion: string
+  ): Promise<string | null> => {
     try {
-      const response = await fetch(`/api/sessions/${sid}`);
-      if (response.ok) {
-        const data = await response.json();
-        setMessages(data.messages);
+      setCreatingSession(true);
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connectionId,
+          title: firstQuestion.substring(0, 100),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create session");
       }
+
+      const data = await response.json();
+      return data.session.id;
     } catch (error) {
-      console.error("Failed to load messages:", error);
+      console.error("Failed to create session:", error);
+      return null;
+    } finally {
+      setCreatingSession(false);
     }
   };
 
@@ -170,35 +259,72 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (!input.trim() || !selectedConnection || streaming) {
+    if (!input.trim() || !selectedConnection || streaming || creatingSession) {
       return;
     }
 
     const question = input.trim();
     setInput("");
-
-    // Clear any previous errors
     clearError();
 
-    // Optimistically add user message to UI
-    const tempUserMessage: ChatMessage = {
-      id: `temp-${Date.now()}`,
-      sessionId: sessionId || "",
-      role: "user",
-      content: question,
-      createdAt: new Date(),
-    };
+    if (!sessionId) {
+      // NEW SESSION FLOW
+      // 1. Create session
+      const newSessionId = await createNewSession(selectedConnection, question);
 
-    setMessages((prev) => [...prev, tempUserMessage]);
+      if (!newSessionId) {
+        alert("Failed to create session. Please try again.");
+        return;
+      }
 
-    // Start streaming
-    await streamChat(question, selectedConnection, sessionId);
+      // 2. Store question for new page to pick up
+      sessionStorage.setItem(
+        "newMessage",
+        JSON.stringify({
+          question,
+          connectionId: selectedConnection,
+        })
+      );
+
+      // 3. Navigate immediately
+      router.push(`/app/${newSessionId}`);
+    } else {
+      // EXISTING SESSION FLOW
+      const timestamp = Date.now();
+      const userMsgId = `temp-user-${timestamp}`;
+      const assistantMsgId = `temp-assistant-${timestamp}`;
+
+      streamingUserMsgId.current = userMsgId;
+      streamingAssistantMsgId.current = assistantMsgId;
+
+      const tempUserMessage: ChatMessage = {
+        id: userMsgId,
+        sessionId: sessionId,
+        role: "user",
+        content: question,
+        createdAt: new Date(),
+      } as ChatMessage;
+
+      const tempAssistantMessage: ChatMessage = {
+        id: assistantMsgId,
+        sessionId: sessionId,
+        role: "assistant",
+        content: "",
+        createdAt: new Date(),
+        metadata: {
+          isStreaming: true,
+        },
+      } as ChatMessage;
+
+      setMessages((prev) => [...prev, tempUserMessage, tempAssistantMessage]);
+
+      // Stream immediately
+      await streamChat(question, selectedConnection, sessionId);
+    }
   };
 
   const handleSuggestionClick = (suggestion: string) => {
     setInput(suggestion);
-    // Optionally auto-submit
-    // Or just let user review and click send
   };
 
   const handleDeepAnalysis = async (
@@ -219,10 +345,8 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   const handleRetrySuccess = useCallback(
     (newMessage: ChatMessage) => {
-      // Add the new successful message to the chat
       setMessages((prev) => [...prev, newMessage]);
 
-      // Trigger sidebar update
       window.dispatchEvent(
         new CustomEvent("session-updated", {
           detail: { sessionId },
@@ -253,11 +377,10 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             {session?.title || "New Chat"}
           </h1>
 
-          {/* Connection Selector */}
           <select
             value={selectedConnection}
             onChange={(e) => setSelectedConnection(e.target.value)}
-            disabled={!sessionId || streaming}
+            disabled={streaming || deepAnalyzing}
             className="px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
           >
             {connections.map((conn) => (
@@ -268,6 +391,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           </select>
         </div>
       </div>
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {!messages.length && !streaming && !deepAnalyzing && (
@@ -278,11 +402,10 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           />
         )}
 
-        {/* Render saved messages */}
+        {/* Render all messages */}
         {messages.map((message, index) => {
           let userQuestion = "";
           if (message.role === "assistant") {
-            // Look backwards for the previous user message
             for (let i = index - 1; i >= 0; i--) {
               if (messages[i].role === "user") {
                 userQuestion = messages[i].content;
@@ -291,12 +414,27 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             }
           }
 
+          const isStreamingMessage =
+            message.id === streamingAssistantMsgId.current && streaming;
+
           return (
             <UnifiedMessage
               key={message.id}
               message={message}
               userQuestion={userQuestion}
               session={session ?? undefined}
+              isStreaming={isStreamingMessage}
+              status={isStreamingMessage ? status : undefined}
+              streamingSql={isStreamingMessage ? sql : undefined}
+              streamingInterpretation={
+                isStreamingMessage ? interpretation : undefined
+              }
+              streamingResults={isStreamingMessage ? results : undefined}
+              streamingSuggestions={
+                isStreamingMessage ? suggestions : undefined
+              }
+              error={isStreamingMessage ? streamError : undefined}
+              onDismissError={isStreamingMessage ? clearError : undefined}
               onDeepAnalysis={
                 message.role === "assistant" && message.metadata?.results
                   ? () => {
@@ -319,22 +457,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           );
         })}
 
-        {/* Streaming Message - Use same unified component */}
-        {(streaming || showError) && (
-          <UnifiedMessage
-            isStreaming={true}
-            status={status}
-            streamingSql={sql}
-            streamingInterpretation={interpretation}
-            streamingResults={results}
-            streamingSuggestions={suggestions}
-            error={streamError}
-            onDismissError={clearError}
-            onSuggestionClick={handleSuggestionClick}
-            canShowSuggestions={canShowSuggestions}
-          />
-        )}
-
         {/* Deep Analysis Streaming */}
         {(deepAnalyzing || showDeepError) && (
           <div
@@ -351,54 +473,31 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                 }`}
               />
               {deepError ? (
-                <>
+                <div className="flex-1">
                   <p className="font-medium text-red-900 dark:text-red-100 mb-2">
                     {deepError.upgradeRequired
-                      ? "Upgrade Required"
-                      : "Deep Analysis Failed"}
+                      ? "Deep Analysis Requires Upgrade"
+                      : "Deep Analysis Error"}
                   </p>
                   <p className="text-sm text-red-700 dark:text-red-300 mb-3">
                     {deepError.message}
                   </p>
 
-                  {/* Upgrade Required */}
-                  {deepError.upgradeRequired && deepError.requiredPlan && (
-                    <div className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/30 dark:to-blue-900/30 rounded-lg p-3">
-                      <div className="flex items-start gap-2">
-                        <Crown className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-purple-900 dark:text-purple-100 mb-1">
-                            Deep Analysis is available on{" "}
-                            {deepError.requiredPlan.charAt(0).toUpperCase() +
-                              deepError.requiredPlan.slice(1)}{" "}
-                            Plan
-                          </p>
-                          <BillingUpgrade
-                            variant="link"
-                            size="sm"
-                            className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 h-auto p-0"
-                          >
-                            Upgrade Now →
-                          </BillingUpgrade>
-                        </div>
-                      </div>
+                  {deepError.upgradeRequired && (
+                    <div className="flex items-center gap-2">
+                      <BillingUpgrade variant="default" size="sm">
+                        <Crown className="h-4 w-4 mr-2" />
+                        Upgrade to {deepError.requiredPlan}
+                      </BillingUpgrade>
+                      <p className="text-xs text-red-600 dark:text-red-400">
+                        You have {deepError.queriesAvailable} queries remaining
+                        today.
+                      </p>
                     </div>
                   )}
-
-                  {/* Insufficient Queries */}
-                  {deepError.queriesNeeded !== undefined &&
-                    deepError.queriesAvailable !== undefined && (
-                      <div className="bg-amber-100 dark:bg-amber-900/30 rounded-lg p-3">
-                        <p className="text-xs text-amber-900 dark:text-amber-100">
-                          Deep Analysis requires {deepError.queriesNeeded}{" "}
-                          queries. You have {deepError.queriesAvailable}{" "}
-                          remaining today.
-                        </p>
-                      </div>
-                    )}
-                </>
+                </div>
               ) : (
-                <>
+                <div className="flex-1">
                   <p className="font-medium text-purple-900 dark:text-purple-100 mb-2">
                     Deep Analysis in Progress
                   </p>
@@ -406,7 +505,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                     {deepStatus}
                   </p>
 
-                  {/* Progress Indicator */}
                   <div className="flex items-center gap-2 mb-3">
                     {[1, 2, 3].map((step) => (
                       <div
@@ -420,7 +518,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                     ))}
                   </div>
 
-                  {/* Completed Steps */}
                   {deepSteps.map((step) => (
                     <div
                       key={step.stepNumber}
@@ -434,7 +531,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                       </p>
                     </div>
                   ))}
-                </>
+                </div>
               )}
             </div>
           </div>
@@ -442,6 +539,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
         <div ref={messagesEndRef} />
       </div>
+
       {/* Input */}
       <ChatInput
         input={input}
