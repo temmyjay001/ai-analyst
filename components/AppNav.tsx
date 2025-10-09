@@ -38,6 +38,15 @@ export default function AppNav() {
     return pathname === href;
   };
 
+  const handleLogout = async () => {
+    const resetUserStore = useUserStore.getState().resetUserStore;
+    resetUserStore();
+
+    localStorage.removeItem("user-storage");
+
+    await signOut({ callbackUrl: "/" });
+  };
+
   return (
     <nav className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -93,7 +102,7 @@ export default function AppNav() {
               </div>
             </div>
             <button
-              onClick={() => signOut({ callbackUrl: "/" })}
+              onClick={() => handleLogout()}
               className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
               title="Sign Out"
             >

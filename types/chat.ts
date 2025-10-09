@@ -36,6 +36,9 @@ export interface MessageMetadata {
   canRetry?: boolean;
   retryOf?: string;
   retryCount?: number;
+  suggestions?: string[];
+  isInformational?: boolean;
+  originalInput?: string;
 }
 
 export interface DeepAnalysisStep {

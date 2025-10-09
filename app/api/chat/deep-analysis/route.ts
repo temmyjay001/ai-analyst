@@ -7,13 +7,7 @@ import { users, chatSessions, chatMessages, usageTracking } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { executeDeepAnalysisStreaming } from "@/lib/ai/deepAnalysis-streaming";
 import { authOptions } from "@/lib/authOptions";
-
-const PLAN_LIMITS = {
-  free: 3,
-  starter: 50,
-  growth: 300,
-  enterprise: Infinity,
-};
+import { PLAN_LIMITS } from "@/lib/constants";
 
 export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();

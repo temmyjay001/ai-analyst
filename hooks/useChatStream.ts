@@ -16,8 +16,10 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
     []
   );
   const [results, setResults] = useState<any[] | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [error, setError] = useState<StreamError | null>(null);
   const [showError, setShowError] = useState(false);
+  const [isInformational, setIsInformational] = useState(false);
 
   const streamChat = useCallback(
     async (question: string, connectionId: string, sessionId?: string) => {
@@ -125,13 +127,29 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
           break;
 
         case "interpretation_complete":
-          // Interpretation complete
+          if (data.suggestions) {
+            setSuggestions(data.suggestions);
+          }
+          break;
+
+        case "suggestions":
+          // Suggestions received separately
+          setSuggestions(data.suggestions || []);
+          break;
+
+        case "informational_message":
+          // AI couldn't generate SQL - show informational message
+          setIsInformational(true);
+          setInterpretationChunks([data.message]);
           break;
 
         case "cached_result":
           setSqlChunks([data.sql]);
           setInterpretationChunks([data.interpretation]);
           setResults(data.results);
+          if (data.suggestions) {
+            setSuggestions(data.suggestions);
+          }
           break;
 
         case "complete":
@@ -160,8 +178,10 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
     sql: sqlChunks.join(""),
     interpretation: interpretationChunks.join(""),
     results,
+    suggestions,
     error,
     showError,
+    isInformational,
     streamChat,
     clearError,
   };
