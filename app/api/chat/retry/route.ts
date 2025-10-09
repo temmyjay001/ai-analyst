@@ -12,13 +12,8 @@ import {
 } from "@/lib/database/factory";
 import { streamInterpretation } from "@/lib/ai/gemini-streaming";
 import { authOptions } from "@/lib/authOptions";
+import { PLAN_LIMITS } from "@/lib/constants";
 
-const PLAN_LIMITS = {
-  free: 3,
-  starter: 50,
-  growth: 300,
-  enterprise: Infinity,
-};
 
 export async function POST(req: NextRequest) {
   try {

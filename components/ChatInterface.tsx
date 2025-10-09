@@ -1,18 +1,18 @@
-// components/ChatInterface.tsx (updated)
-
+// components/ChatInterface.tsx - Updated to use UnifiedMessage
 "use client";
 
 import { useState, useEffect, useRef, FormEvent, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Send, Brain, X, Crown } from "lucide-react";
+import { Loader2, Brain, Crown } from "lucide-react";
 import { useChatStream } from "@/hooks/useChatStream";
 import { useDeepAnalysisStream } from "@/hooks/useDeepAnalysisStream";
-import ChatMessageComponent from "./ChatMessage";
-import StreamingMessage from "./StreamingMessage";
+import UnifiedMessage from "./UnifiedMessage"; // NEW: Unified component
 import { ChatMessage, ChatSession } from "@/types/chat";
 import EmptyState from "./EmptyState";
-import { BillingUpgrade } from "./BillingUpgrade";
 import ChatInput from "./ChatInput";
+import { useUserStore } from "@/store/userStore"; // Import userStore
+import { MULTI_TURN_PLANS } from "@/lib/constants";
+import { BillingUpgrade } from "./BillingUpgrade";
 
 interface ChatInterfaceProps {
   sessionId?: string;
@@ -28,6 +28,8 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const [loadingSession, setLoadingSession] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const userPlan = useUserStore((state) => state.plan);
+
   // Chat streaming
   const {
     streaming,
@@ -35,8 +37,10 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     sql,
     interpretation,
     results,
+    suggestions,
     error: streamError,
     showError,
+    isInformational,
     streamChat,
     clearError,
   } = useChatStream({
@@ -61,7 +65,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         }
       }
 
-      // Trigger sidebar refresh (without reloading messages)
+      // Trigger sidebar refresh
       window.dispatchEvent(
         new CustomEvent("session-updated", {
           detail: { sessionId: data.sessionId },
@@ -106,7 +110,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     if (sessionId) {
       loadSession(sessionId);
     } else {
-      // Clear state for new chat
       setSession(null);
       setMessages([]);
     }
@@ -192,6 +195,12 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     await streamChat(question, selectedConnection, sessionId);
   };
 
+  const handleSuggestionClick = (suggestion: string) => {
+    setInput(suggestion);
+    // Optionally auto-submit
+    // Or just let user review and click send
+  };
+
   const handleDeepAnalysis = async (
     question: string,
     sql: string,
@@ -220,11 +229,12 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         })
       );
 
-      // Scroll to bottom to show new message
       scrollToBottom();
     },
     [sessionId]
   );
+
+  const canShowSuggestions = MULTI_TURN_PLANS.includes(userPlan);
 
   if (loadingSession) {
     return (
@@ -247,7 +257,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           <select
             value={selectedConnection}
             onChange={(e) => setSelectedConnection(e.target.value)}
-            disabled={!!sessionId || streaming}
+            disabled={!sessionId || streaming}
             className="px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
           >
             {connections.map((conn) => (
@@ -258,7 +268,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           </select>
         </div>
       </div>
-
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {!messages.length && !streaming && !deepAnalyzing && (
@@ -268,6 +277,8 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             }}
           />
         )}
+
+        {/* Render saved messages */}
         {messages.map((message, index) => {
           let userQuestion = "";
           if (message.role === "assistant") {
@@ -281,7 +292,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           }
 
           return (
-            <ChatMessageComponent
+            <UnifiedMessage
               key={message.id}
               message={message}
               userQuestion={userQuestion}
@@ -289,7 +300,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
               onDeepAnalysis={
                 message.role === "assistant" && message.metadata?.results
                   ? () => {
-                      // Find previous user message
                       const userMsg = messages.find(
                         (m) =>
                           m.role === "user" && m.createdAt < message.createdAt
@@ -303,19 +313,25 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                   : undefined
               }
               onRetrySuccess={handleRetrySuccess}
+              onSuggestionClick={handleSuggestionClick}
+              canShowSuggestions={canShowSuggestions}
             />
           );
         })}
 
-        {/* Streaming Message */}
+        {/* Streaming Message - Use same unified component */}
         {(streaming || showError) && (
-          <StreamingMessage
+          <UnifiedMessage
+            isStreaming={true}
             status={status}
-            sql={sql}
-            interpretation={interpretation}
-            results={results}
+            streamingSql={sql}
+            streamingInterpretation={interpretation}
+            streamingResults={results}
+            streamingSuggestions={suggestions}
             error={streamError}
             onDismissError={clearError}
+            onSuggestionClick={handleSuggestionClick}
+            canShowSuggestions={canShowSuggestions}
           />
         )}
 
@@ -334,104 +350,91 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                   deepError ? "text-red-600" : "text-purple-600 animate-pulse"
                 }`}
               />
-              <div className="flex-1 min-w-0">
-                {deepError ? (
-                  <>
-                    <p className="font-medium text-red-900 dark:text-red-100 mb-2">
-                      {deepError.upgradeRequired
-                        ? "Upgrade Required"
-                        : "Deep Analysis Failed"}
-                    </p>
-                    <p className="text-sm text-red-700 dark:text-red-300 mb-3">
-                      {deepError.message}
-                    </p>
+              {deepError ? (
+                <>
+                  <p className="font-medium text-red-900 dark:text-red-100 mb-2">
+                    {deepError.upgradeRequired
+                      ? "Upgrade Required"
+                      : "Deep Analysis Failed"}
+                  </p>
+                  <p className="text-sm text-red-700 dark:text-red-300 mb-3">
+                    {deepError.message}
+                  </p>
 
-                    {/* Upgrade Required */}
-                    {deepError.upgradeRequired && deepError.requiredPlan && (
-                      <div className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/30 dark:to-blue-900/30 rounded-lg p-3">
-                        <div className="flex items-start gap-2">
-                          <Crown className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-purple-900 dark:text-purple-100 mb-1">
-                              Deep Analysis is available on{" "}
-                              {deepError.requiredPlan.charAt(0).toUpperCase() +
-                                deepError.requiredPlan.slice(1)}{" "}
-                              Plan
-                            </p>
-                            <BillingUpgrade
-                              variant="link"
-                              size="sm"
-                              className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 h-auto p-0"
-                            >
-                              Upgrade Now →
-                            </BillingUpgrade>
-                          </div>
+                  {/* Upgrade Required */}
+                  {deepError.upgradeRequired && deepError.requiredPlan && (
+                    <div className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/30 dark:to-blue-900/30 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <Crown className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-purple-900 dark:text-purple-100 mb-1">
+                            Deep Analysis is available on{" "}
+                            {deepError.requiredPlan.charAt(0).toUpperCase() +
+                              deepError.requiredPlan.slice(1)}{" "}
+                            Plan
+                          </p>
+                          <BillingUpgrade
+                            variant="link"
+                            size="sm"
+                            className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 h-auto p-0"
+                          >
+                            Upgrade Now →
+                          </BillingUpgrade>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Insufficient Queries */}
+                  {deepError.queriesNeeded !== undefined &&
+                    deepError.queriesAvailable !== undefined && (
+                      <div className="bg-amber-100 dark:bg-amber-900/30 rounded-lg p-3">
+                        <p className="text-xs text-amber-900 dark:text-amber-100">
+                          Deep Analysis requires {deepError.queriesNeeded}{" "}
+                          queries. You have {deepError.queriesAvailable}{" "}
+                          remaining today.
+                        </p>
                       </div>
                     )}
+                </>
+              ) : (
+                <>
+                  <p className="font-medium text-purple-900 dark:text-purple-100 mb-2">
+                    Deep Analysis in Progress
+                  </p>
+                  <p className="text-sm text-purple-700 dark:text-purple-300 mb-3">
+                    {deepStatus}
+                  </p>
 
-                    {/* Insufficient Queries */}
-                    {deepError.queriesNeeded !== undefined &&
-                      deepError.queriesAvailable !== undefined && (
-                        <div className="bg-amber-100 dark:bg-amber-900/30 rounded-lg p-3">
-                          <p className="text-xs text-amber-900 dark:text-amber-100">
-                            Deep Analysis requires {deepError.queriesNeeded}{" "}
-                            queries. You have {deepError.queriesAvailable}{" "}
-                            remaining today.
-                          </p>
-                        </div>
-                      )}
-                  </>
-                ) : (
-                  <>
-                    <p className="font-medium text-purple-900 dark:text-purple-100 mb-2">
-                      Deep Analysis in Progress
-                    </p>
-                    <p className="text-sm text-purple-700 dark:text-purple-300 mb-3">
-                      {deepStatus}
-                    </p>
-
-                    {/* Progress Indicator */}
-                    <div className="flex items-center gap-2 mb-3">
-                      {[1, 2, 3].map((step) => (
-                        <div
-                          key={step}
-                          className={`flex-1 h-2 rounded-full ${
-                            step <= currentStep
-                              ? "bg-purple-600"
-                              : "bg-purple-200 dark:bg-purple-800"
-                          }`}
-                        />
-                      ))}
-                    </div>
-
-                    {/* Completed Steps */}
-                    {deepSteps.map((step) => (
+                  {/* Progress Indicator */}
+                  <div className="flex items-center gap-2 mb-3">
+                    {[1, 2, 3].map((step) => (
                       <div
-                        key={step.stepNumber}
-                        className="mb-2 p-2 bg-white dark:bg-gray-800 rounded"
-                      >
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">
-                          {step.question}
-                        </p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                          {step.insights}
-                        </p>
-                      </div>
+                        key={step}
+                        className={`flex-1 h-2 rounded-full ${
+                          step <= currentStep
+                            ? "bg-purple-600"
+                            : "bg-purple-200 dark:bg-purple-800"
+                        }`}
+                      />
                     ))}
-                  </>
-                )}
-              </div>
+                  </div>
 
-              {/* Dismiss button for errors */}
-              {deepError && (
-                <button
-                  onClick={clearDeepError}
-                  className="p-1 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors"
-                  title="Dismiss error"
-                >
-                  <X className="h-4 w-4 text-red-600 dark:text-red-400" />
-                </button>
+                  {/* Completed Steps */}
+                  {deepSteps.map((step) => (
+                    <div
+                      key={step.stepNumber}
+                      className="mb-2 p-2 bg-white dark:bg-gray-800 rounded"
+                    >
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {step.question}
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        {step.insights}
+                      </p>
+                    </div>
+                  ))}
+                </>
               )}
             </div>
           </div>
@@ -439,7 +442,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
         <div ref={messagesEndRef} />
       </div>
-
       {/* Input */}
       <ChatInput
         input={input}
@@ -453,35 +455,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             : "Select a database connection first"
         }
       />
-      {/* <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={streaming || deepAnalyzing || !selectedConnection}
-            placeholder={
-              selectedConnection
-                ? "Ask a question about your data..."
-                : "Select a database connection first"
-            }
-            className="flex-1 px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={
-              !input.trim() || streaming || deepAnalyzing || !selectedConnection
-            }
-            className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-          >
-            {streaming || deepAnalyzing ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
-          </button>
-        </form>
-      </div> */}
     </div>
   );
 }

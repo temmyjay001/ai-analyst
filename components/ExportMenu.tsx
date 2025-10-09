@@ -9,7 +9,7 @@ interface ExportMenuProps {
   onClose?: () => void;
 }
 
-export default function ExportMenu({ query, onClose }: ExportMenuProps) {
+export default function ExportMenu({ query, onClose }: Readonly<ExportMenuProps>) {
   const [copied, setCopied] = useState(false);
 
   const handleCopyLink = async () => {

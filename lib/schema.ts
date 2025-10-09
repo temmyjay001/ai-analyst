@@ -187,6 +187,9 @@ export const chatMessages = pgTable(
       canRetry?: boolean;
       retryOf?: string;
       retryCount?: number;
+      suggestions?: string[];
+      isInformational?: boolean;
+      originalInput?: string;
     }>(),
 
     createdAt: timestamp("created_at").defaultNow().notNull(),

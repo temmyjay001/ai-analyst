@@ -19,6 +19,7 @@ interface UserState {
   setUsage: (usage: UsageData) => void;
   setLoading: (loading: boolean) => void;
   fetchUserData: (force?: boolean) => Promise<void>;
+  resetUserStore: () => void;
 }
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
@@ -31,6 +32,15 @@ export const useUserStore = create<UserState>()(
       loading: false,
       initialized: false,
       lastFetched: null,
+
+      resetUserStore: () =>
+        set({
+          plan: "free",
+          usage: null,
+          loading: false,
+          initialized: false,
+          lastFetched: null,
+        }),
 
       setPlan: (plan) => set({ plan }),
 

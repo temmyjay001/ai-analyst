@@ -18,23 +18,18 @@ import {
   ConnectionConfig,
 } from "@/lib/database/factory";
 import { getSchemaContext } from "@/lib/database/schemaIntrospection";
-import { streamSQL, streamInterpretation } from "@/lib/ai/gemini-streaming";
+import {
+  streamSQL,
+  streamInterpretationWithSuggestions,
+  isUnableToGenerateSQL,
+} from "@/lib/ai/gemini-streaming";
 import {
   generateCacheKey,
   getCachedResult,
   setCachedResult,
 } from "@/lib/cache/redis-cache";
 import { validateAndCleanSQL } from "@/lib/utils/sql";
-
-// Plan limits
-const PLAN_LIMITS = {
-  free: 3,
-  starter: 50,
-  growth: 300,
-  enterprise: Infinity,
-};
-
-const MULTI_TURN_PLANS = ["growth", "enterprise"];
+import { MULTI_TURN_PLANS, PLAN_LIMITS } from "@/lib/constants";
 
 export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
@@ -414,7 +409,73 @@ export async function POST(req: NextRequest) {
             send("sql_chunk", { chunk });
           }
 
+          // ==========================================
+          // CHECK FOR GIBBERISH/UNABLE TO GENERATE
+          // ==========================================
+          const { isUnable, reason } = isUnableToGenerateSQL(sql);
+
+          if (isUnable) {
+            // AI couldn't generate SQL - treat as informational message
+            const responseMessage =
+              reason ||
+              "I couldn't generate a valid SQL query from that input. Please try asking a question about your data.";
+
+            // Save assistant response (as informational, no SQL/results)
+            const assistantMessage = await db
+              .insert(chatMessages)
+              .values({
+                sessionId: currentSessionId,
+                role: "assistant",
+                content: responseMessage,
+                metadata: {
+                  isInformational: true,
+                  originalInput: question,
+                },
+              })
+              .returning();
+
+            // Update session
+            await db
+              .update(chatSessions)
+              .set({
+                messageCount: (currentSession[0]?.messageCount || 0) + 2,
+                updatedAt: new Date(),
+              })
+              .where(eq(chatSessions.id, currentSessionId));
+
+            // Update usage tracking (still counts as a query)
+            if (usage[0]) {
+              await db
+                .update(usageTracking)
+                .set({ queryCount: currentQueryCount + 1 })
+                .where(eq(usageTracking.id, usage[0].id));
+            } else {
+              await db.insert(usageTracking).values({
+                userId,
+                date: today,
+                queryCount: 1,
+              });
+            }
+
+            // Send the informational message
+            send("informational_message", {
+              message: responseMessage,
+            });
+
+            send("complete", {
+              sessionId: currentSessionId,
+              message: assistantMessage[0],
+              canContinue: isMultiTurnAllowed,
+              usageRemaining: limit - currentQueryCount - 1,
+            });
+
+            controller.close();
+            return;
+          }
+
+          // ==========================================
           // CLEAN AND VALIDATE SQL BEFORE SENDING
+          // ==========================================
           let cleanedSQL: string;
           try {
             cleanedSQL = validateAndCleanSQL(sql);
@@ -528,20 +589,39 @@ export async function POST(req: NextRequest) {
             send("interpretation_start", {});
 
             let interpretation = "";
-            for await (const chunk of streamInterpretation(
+            let suggestions: string[] = [];
+
+            // Use new function that can generate suggestions
+            for await (const chunk of streamInterpretationWithSuggestions(
               question,
               cleanedSQL,
               results,
               dbType,
-              userPlan
+              userPlan,
+              isMultiTurnAllowed // Only generate suggestions for multi-turn users
             )) {
-              interpretation += chunk;
-              send("interpretation_chunk", { chunk });
+              if (chunk.type === "interpretation") {
+                interpretation += chunk.content;
+                send("interpretation_chunk", { chunk: chunk.content });
+              } else if (chunk.type === "suggestions") {
+                // Parse suggestions (format: "1. Question\n2. Question\n3. Question")
+                const parsedSuggestions = chunk.content
+                  .split("\n")
+                  .filter((line) => line.match(/^\d+\./))
+                  .map((line) => line.replace(/^\d+\.\s*/, "").trim())
+                  .filter((s) => s.length > 0);
+
+                suggestions = parsedSuggestions;
+                send("suggestions", { suggestions });
+              }
             }
 
-            send("interpretation_complete", { interpretation });
+            send("interpretation_complete", {
+              interpretation,
+              suggestions: isMultiTurnAllowed ? suggestions : undefined,
+            });
 
-            // Save assistant message
+            // Save assistant message with suggestions in metadata
             const assistantMessage = await db
               .insert(chatMessages)
               .values({
@@ -550,11 +630,12 @@ export async function POST(req: NextRequest) {
                 content: interpretation,
                 metadata: {
                   sql: cleanedSQL,
-                  results: results.slice(0, 100), // Store only first 100 rows
+                  results: results.slice(0, 100),
                   executionTimeMs: Date.now() - startTime,
                   rowCount: results.length,
                   dbType,
                   fromCache: false,
+                  suggestions: isMultiTurnAllowed ? suggestions : undefined,
                 },
               })
               .returning();

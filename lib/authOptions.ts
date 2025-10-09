@@ -53,12 +53,11 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          return {
-            id: user[0].id,
-            email: user[0].email,
-            name: user[0].name,
-            image: user[0].image,
-          };
+          if (!user[0].emailVerified) {
+            throw new Error("Please verify your email before logging in.");
+          }
+
+          return user[0];
         } catch (error) {
           console.error("Auth error:", error);
           return null;
