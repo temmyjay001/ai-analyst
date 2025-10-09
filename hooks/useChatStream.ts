@@ -1,7 +1,7 @@
 // hooks/useChatStream.ts
 
 import { useState, useCallback } from "react";
-import { ChatMessage, StreamError, StreamStatus } from "@/types/chat";
+import { StreamError, StreamStatus } from "@/types/chat";
 
 interface UseChatStreamOptions {
   onComplete?: (data: any) => void;
