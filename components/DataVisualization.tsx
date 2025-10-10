@@ -30,7 +30,10 @@ const CustomTooltip = ({
 
   const currentPoint = payload[0].payload;
   const currentIndex = currentPoint._index;
-  const previousPoint = currentIndex > 0 ? chartData[currentIndex - 1] : null;
+  const previousPoint =
+    chartData && typeof currentIndex === "number" && currentIndex > 0
+      ? chartData[currentIndex - 1]
+      : null;
 
   return (
     <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-xl border-2 border-gray-200 dark:border-gray-600">
