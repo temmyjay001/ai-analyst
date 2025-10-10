@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { createDatabaseConnection, DatabaseType } from "@/lib/database/factory";
+import { encrypt } from "@/lib/encryption";
 
 export async function POST(req: NextRequest) {
   try {
@@ -50,8 +51,8 @@ export async function POST(req: NextRequest) {
       port,
       database,
       username,
-      passwordEncrypted: password ? password : null, // Not encrypted for test
-      connectionUrlEncrypted: connectionUrl ? connectionUrl : null,
+      passwordEncrypted: password ? encrypt(password) : null, // Not encrypted for test
+      connectionUrlEncrypted: connectionUrl ? encrypt(connectionUrl) : null,
       ssl,
     };
 
