@@ -214,10 +214,10 @@ export default function UnifiedMessage({
                 Query returned {message.metadata?.rowCount} rows
               </span>
             </div>
-            <ResultsTable
+            {/* <ResultsTable
               results={results}
               onExport={() => ExportUtils.downloadCSV(results, "query-results")}
-            />
+            /> */}
           </div>
         )}
 

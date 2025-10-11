@@ -2,7 +2,7 @@
 "use client";
 
 import { use } from "react";
-import ChatInterface from "@/components/ChatInterface";
+import ChatLayoutWrapper from "@/components/ChatLayoutWrapper";
 
 interface SessionPageProps {
   params: Promise<{
@@ -12,5 +12,5 @@ interface SessionPageProps {
 
 export default function SessionPage({ params }: SessionPageProps) {
   const { sessionId } = use(params);
-  return <ChatInterface sessionId={sessionId} />;
+  return <ChatLayoutWrapper sessionId={sessionId} />;
 }

@@ -1,11 +1,11 @@
 // hooks/useChatStream.ts
-
-import { useState, useCallback } from "react";
-import { StreamError, StreamStatus } from "@/types/chat";
+import { useState, useCallback, useRef } from "react";
+import { StreamError, StreamStatus, MessageMetadata } from "@/types/chat";
 
 interface UseChatStreamOptions {
   onComplete?: (data: any) => void;
   onError?: (error: StreamError) => void;
+  onSessionCreated?: (sessionId: string) => void;
 }
 
 export function useChatStream(options: UseChatStreamOptions = {}) {
@@ -20,26 +20,37 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
   const [error, setError] = useState<StreamError | null>(null);
   const [showError, setShowError] = useState(false);
   const [isInformational, setIsInformational] = useState(false);
+  const [metadata, setMetadata] = useState<MessageMetadata | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const streamChat = useCallback(
     async (question: string, connectionId: string, sessionId?: string) => {
+      // Reset state
       setStreaming(true);
       setStatus(null);
       setSqlChunks([]);
       setInterpretationChunks([]);
       setResults(null);
+      setSuggestions([]);
       setError(null);
       setShowError(false);
+      setIsInformational(false);
+      setMetadata(null);
+
+      // Create abort controller for cancellation
+      abortControllerRef.current = new AbortController();
 
       try {
         const response = await fetch("/api/chat/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ question, connectionId, sessionId }),
+          signal: abortControllerRef.current.signal,
         });
 
         if (!response.ok) {
-          throw new Error("Failed to start stream");
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to start stream");
         }
 
         const reader = response.body?.getReader();
@@ -75,17 +86,21 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
           }
         }
       } catch (err: any) {
-        console.error("Stream error:", err);
-        const streamError: StreamError =
-          typeof err === "object" && err.message
-            ? err
-            : { message: String(err) };
-
-        setError(streamError);
-        setShowError(true);
-        options.onError?.(err.message);
+        if (err.name === "AbortError") {
+          console.log("Stream aborted");
+        } else {
+          console.error("Stream error:", err);
+          const streamError: StreamError = {
+            message: err.message || String(err),
+            canRetry: true,
+          };
+          setError(streamError);
+          setShowError(true);
+          options.onError?.(streamError);
+        }
       } finally {
         setStreaming(false);
+        abortControllerRef.current = null;
       }
     },
     [options]
@@ -99,7 +114,7 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
           break;
 
         case "session_created":
-          // Handle new session creation
+          options.onSessionCreated?.(data.sessionId);
           break;
 
         case "user_message":
@@ -112,14 +127,25 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
 
         case "sql_generated":
           // SQL generation complete
+          setMetadata((prev) => ({ ...prev, sql: sqlChunks.join("") }));
+          break;
+
+        case "sql_executing":
+          setStatus({ stage: "executing", message: "Executing query..." });
           break;
 
         case "results":
           setResults(data.results);
+          setMetadata((prev) => ({
+            ...prev,
+            rowCount: data.rowCount,
+            executionTimeMs: data.executionTimeMs,
+          }));
           break;
 
         case "interpretation_start":
           setInterpretationChunks([]);
+          setStatus({ stage: "interpreting", message: "Analyzing results..." });
           break;
 
         case "interpretation_chunk":
@@ -133,12 +159,10 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
           break;
 
         case "suggestions":
-          // Suggestions received separately
           setSuggestions(data.suggestions || []);
           break;
 
         case "informational_message":
-          // AI couldn't generate SQL - show informational message
           setIsInformational(true);
           setInterpretationChunks([data.message]);
           break;
@@ -150,9 +174,16 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
           if (data.suggestions) {
             setSuggestions(data.suggestions);
           }
+          setMetadata({
+            fromCache: true,
+            cacheKey: data.cacheKey,
+            sql: data.sql,
+            rowCount: data.results?.length,
+          });
           break;
 
         case "complete":
+          setStatus({ stage: "complete", message: "Query completed" });
           options.onComplete?.(data);
           break;
 
@@ -160,19 +191,37 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
           setError(data as StreamError);
           setShowError(true);
           setStreaming(false);
+          setStatus({ stage: "error", message: data.message });
           options.onError?.(data as StreamError);
           break;
       }
     },
-    [options]
+    [options, sqlChunks]
   );
+
+  const cancelStream = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setStreaming(false);
+      setStatus(null);
+    }
+  }, []);
 
   const clearError = useCallback(() => {
     setError(null);
     setShowError(false);
   }, []);
 
+  const retry = useCallback(
+    (question: string, connectionId: string, sessionId?: string) => {
+      clearError();
+      return streamChat(question, connectionId, sessionId);
+    },
+    [streamChat, clearError]
+  );
+
   return {
+    // State
     streaming,
     status,
     sql: sqlChunks.join(""),
@@ -182,7 +231,12 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
     error,
     showError,
     isInformational,
+    metadata,
+
+    // Actions
     streamChat,
+    cancelStream,
     clearError,
+    retry,
   };
 }

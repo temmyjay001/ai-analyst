@@ -1,11 +1,11 @@
 // hooks/useDeepAnalysisStream.ts
-
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { DeepAnalysisStep, StreamError } from "@/types/chat";
 
 interface UseDeepAnalysisStreamOptions {
   onComplete?: (data: any) => void;
   onError?: (error: StreamError) => void;
+  onStepComplete?: (step: DeepAnalysisStep) => void;
 }
 
 export function useDeepAnalysisStream(
@@ -19,6 +19,8 @@ export function useDeepAnalysisStream(
   const [showError, setShowError] = useState(false);
   const [comprehensiveInsights, setComprehensiveInsights] =
     useState<string>("");
+  const [insightsChunks, setInsightsChunks] = useState<string[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const streamDeepAnalysis = useCallback(
     async (
@@ -28,6 +30,7 @@ export function useDeepAnalysisStream(
       connectionId: string,
       sessionId: string
     ) => {
+      // Reset state
       setStreaming(true);
       setCurrentStep(0);
       setSteps([]);
@@ -35,9 +38,13 @@ export function useDeepAnalysisStream(
       setError(null);
       setShowError(false);
       setComprehensiveInsights("");
+      setInsightsChunks([]);
+
+      // Create abort controller
+      abortControllerRef.current = new AbortController();
 
       try {
-        const response = await fetch("/api/chat/deep-analysis/stream", {
+        const response = await fetch("/api/chat/deep-analysis", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -47,10 +54,12 @@ export function useDeepAnalysisStream(
             connectionId,
             sessionId,
           }),
+          signal: abortControllerRef.current.signal,
         });
 
         if (!response.ok) {
-          throw new Error("Failed to start deep analysis");
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to start deep analysis");
         }
 
         const reader = response.body?.getReader();
@@ -86,17 +95,21 @@ export function useDeepAnalysisStream(
           }
         }
       } catch (err: any) {
-        console.error("Deep analysis stream error:", err);
-        const streamError: StreamError =
-          typeof err === "object" && err.message
-            ? err
-            : { message: String(err) };
-
-        setError(streamError);
-        setShowError(true);
-        options.onError?.(streamError);
+        if (err.name === "AbortError") {
+          console.log("Deep analysis aborted");
+        } else {
+          console.error("Deep analysis stream error:", err);
+          const streamError: StreamError = {
+            message: err.message || String(err),
+            canRetry: true,
+          };
+          setError(streamError);
+          setShowError(true);
+          options.onError?.(streamError);
+        }
       } finally {
         setStreaming(false);
+        abortControllerRef.current = null;
       }
     },
     [options]
@@ -109,13 +122,9 @@ export function useDeepAnalysisStream(
           setStatus(data.message);
           break;
 
-        case "follow_ups_generated":
-          setStatus("Follow-up queries generated");
-          break;
-
         case "step_start":
           setCurrentStep(data.stepNumber);
-          setStatus(`Analyzing step ${data.stepNumber} of 3...`);
+          setStatus(`Analyzing step ${data.stepNumber}: ${data.question}`);
           break;
 
         case "step_progress":
@@ -123,15 +132,24 @@ export function useDeepAnalysisStream(
           break;
 
         case "step_complete":
-          setSteps((prev) => [...prev, data]);
+          const step: DeepAnalysisStep = {
+            stepNumber: data.stepNumber,
+            question: data.question,
+            sql: data.sql,
+            results: data.results,
+            insights: data.insights,
+          };
+          setSteps((prev) => [...prev, step]);
+          options.onStepComplete?.(step);
           break;
 
         case "comprehensive_insights_start":
           setStatus("Generating comprehensive insights...");
+          setInsightsChunks([]);
           break;
 
         case "comprehensive_insights_chunk":
-          setComprehensiveInsights((prev) => prev + data.chunk);
+          setInsightsChunks((prev) => [...prev, data.chunk]);
           break;
 
         case "comprehensive_insights_complete":
@@ -139,11 +157,25 @@ export function useDeepAnalysisStream(
           break;
 
         case "complete":
+          setStatus("Deep analysis completed");
           options.onComplete?.(data);
           break;
 
         case "error":
-          setError(data as StreamError);
+          // Handle different types of errors
+          if (data.upgradeRequired) {
+            setError({
+              ...data,
+              message: "Deep Analysis requires Growth plan or higher",
+            });
+          } else if (data.limitReached) {
+            setError({
+              ...data,
+              message: `Query limit reached. ${data.queriesAvailable} queries remaining today.`,
+            });
+          } else {
+            setError(data as StreamError);
+          }
           setShowError(true);
           setStreaming(false);
           options.onError?.(data as StreamError);
@@ -153,20 +185,32 @@ export function useDeepAnalysisStream(
     [options]
   );
 
+  const cancelDeepAnalysis = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setStreaming(false);
+      setStatus("Deep analysis cancelled");
+    }
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
     setShowError(false);
   }, []);
 
   return {
+    // State
     streaming,
     currentStep,
     steps,
     status,
     error,
     showError,
-    comprehensiveInsights,
+    comprehensiveInsights: insightsChunks.join(""),
+
+    // Actions
     streamDeepAnalysis,
+    cancelDeepAnalysis,
     clearError,
   };
 }

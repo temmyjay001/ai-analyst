@@ -217,3 +217,136 @@ html {
     @apply bg-background text-foreground;
   }
 }
+
+
+/* Animation delays for typing indicators */
+.animation-delay-200 {
+  animation-delay: 200ms;
+}
+
+.animation-delay-400 {
+  animation-delay: 400ms;
+}
+
+/* Smooth scrolling for chat */
+.chat-scroll-area {
+  scroll-behavior: smooth;
+}
+
+/* SQL code highlighting */
+.sql-code {
+  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Streaming text animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.streaming-text {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Table hover effects */
+.results-table tbody tr:hover {
+  background-color: var(--muted);
+}
+
+/* Copy feedback */
+.copy-feedback {
+  position: absolute;
+  top: -20px;
+  right: 0;
+  background: var(--success);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  animation: fadeInOut 2s ease-out;
+}
+
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  20% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  80% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Sidebar transitions */
+.sidebar-transition {
+  transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+}
+
+/* Message card shadows */
+.message-card {
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  transition: box-shadow 0.2s ease;
+}
+
+.message-card:hover {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+/* Deep analysis step indicators */
+.analysis-step {
+  border-left: 3px solid var(--primary);
+  padding-left: 1rem;
+  margin-left: 0.5rem;
+}
+
+/* Status indicator dots */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.status-dot.loading {
+  background: var(--warning);
+  animation: pulse 1.5s infinite;
+}
+
+.status-dot.success {
+  background: var(--success);
+}
+
+.status-dot.error {
+  background: var(--destructive);
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}

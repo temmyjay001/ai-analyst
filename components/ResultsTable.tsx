@@ -1,173 +1,270 @@
-import { Download, ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+// components/ResultsTable.tsx
+"use client";
+
+import React, { useState, useMemo } from "react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Download, Copy, ChevronLeft, ChevronRight } from "lucide-react";
+import { toast } from "sonner";
+import {
+  exportToCSV,
+  exportToJSON,
+  exportToExcel,
+} from "@/lib/utils/sqlFormatter";
+import { cn } from "@/lib/utils";
 
 interface ResultsTableProps {
-  results: any[];
-  onExport: () => void;
+  data: any[];
+  className?: string;
+  showExport?: boolean;
+  pageSize?: number;
 }
 
 export default function ResultsTable({
-  results,
-  onExport,
-}: Readonly<ResultsTableProps>) {
+  data,
+  className,
+  showExport = true,
+  pageSize = 100,
+}: ResultsTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [copiedCell, setCopiedCell] = useState<string | null>(null);
 
-  if (!results || results.length === 0) return null;
+  // Pagination
+  const totalPages = Math.ceil(data.length / pageSize);
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    return data.slice(start, end);
+  }, [data, currentPage, pageSize]);
 
-  const headers = Object.keys(results[0]);
-  const totalRows = results.length;
-  const shouldPaginate = totalRows > 10;
+  // Get column names
+  const columns = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    return Object.keys(data[0]);
+  }, [data]);
 
-  // Calculate pagination
-  const totalPages = Math.ceil(totalRows / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, totalRows);
-  const paginatedResults = shouldPaginate
-    ? results.slice(startIndex, endIndex)
-    : results;
+  // Determine column types
+  const columnTypes = useMemo(() => {
+    if (!data || data.length === 0) return {};
 
-  // Reset to page 1 if page size changes
-  const handlePageSizeChange = (newSize: number) => {
-    setPageSize(newSize);
-    setCurrentPage(1);
+    const types: Record<string, string> = {};
+    columns.forEach((col) => {
+      const sampleValue = data.find((row) => row[col] !== null)?.[col];
+      if (sampleValue === undefined || sampleValue === null) {
+        types[col] = "null";
+      } else if (typeof sampleValue === "number") {
+        types[col] = "number";
+      } else if (typeof sampleValue === "boolean") {
+        types[col] = "boolean";
+      } else if (!isNaN(Date.parse(sampleValue))) {
+        types[col] = "date";
+      } else {
+        types[col] = "string";
+      }
+    });
+    return types;
+  }, [data, columns]);
+
+  const handleCopyCell = (value: any, cellId: string) => {
+    const text = value === null ? "NULL" : String(value);
+    navigator.clipboard.writeText(text);
+    setCopiedCell(cellId);
+    toast.success("Copied to clipboard");
+    setTimeout(() => setCopiedCell(null), 2000);
   };
 
-  const goToPage = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  const handleCopyTable = () => {
+    const headers = columns.join("\t");
+    const rows = data
+      .map((row) =>
+        columns
+          .map((col) => (row[col] === null ? "NULL" : String(row[col])))
+          .join("\t")
+      )
+      .join("\n");
+    const tableText = `${headers}\n${rows}`;
+
+    navigator.clipboard.writeText(tableText);
+    toast.success("Table copied to clipboard");
   };
+
+  const formatCellValue = (value: any, type: string) => {
+    if (value === null) {
+      return <span className="text-muted-foreground italic">NULL</span>;
+    }
+
+    switch (type) {
+      case "number":
+        return (
+          <span className="font-mono">
+            {typeof value === "number" ? value.toLocaleString() : value}
+          </span>
+        );
+      case "boolean":
+        return (
+          <Badge variant={value ? "default" : "secondary"}>
+            {String(value)}
+          </Badge>
+        );
+      case "date":
+        try {
+          const date = new Date(value);
+          return (
+            <span className="font-mono">
+              {date.toLocaleDateString()} {date.toLocaleTimeString()}
+            </span>
+          );
+        } catch {
+          return String(value);
+        }
+      default:
+        return String(value);
+    }
+  };
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No results to display
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-3">
-      {/* Header with Export and Page Size */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        {shouldPaginate && (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-600 dark:text-gray-400">
-              Rows per page:
-            </span>
-            <select
-              value={pageSize}
-              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
+    <div className={cn("space-y-2", className)}>
+      {/* Header Actions */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline">
+            {data.length} row{data.length !== 1 ? "s" : ""}
+          </Badge>
+          <Badge variant="outline">
+            {columns.length} column{columns.length !== 1 ? "s" : ""}
+          </Badge>
+        </div>
+
+        {showExport && (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={handleCopyTable}>
+              <Copy className="h-3 w-3 mr-1" />
+              Copy
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <Download className="h-3 w-3 mr-1" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => exportToCSV(data)}>
+                  Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportToJSON(data)}>
+                  Export as JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportToExcel(data)}>
+                  Export as Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
-
-        <button
-          onClick={onExport}
-          className="inline-flex items-center px-3 py-2 text-sm font-medium text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors ml-auto"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Export CSV
-        </button>
       </div>
 
-      {/* Table Container */}
-      <div className="overflow-x-auto -mx-4 sm:mx-0">
-        <div className="inline-block min-w-full align-middle">
-          <div className="overflow-hidden border border-gray-200 dark:border-gray-700 sm:rounded-lg">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-900">
-                <tr>
-                  {headers.map((key) => (
-                    <th
-                      key={key}
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+      {/* Table */}
+      <ScrollArea className="border rounded-lg">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {columns.map((column) => (
+                <TableHead key={column} className="font-semibold">
+                  {column}
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    ({columnTypes[column]})
+                  </span>
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedData.map((row, rowIndex) => (
+              <TableRow key={rowIndex}>
+                {columns.map((column) => {
+                  const cellId = `${rowIndex}-${column}`;
+                  const iscopied = copiedCell === cellId;
+
+                  return (
+                    <TableCell
+                      key={column}
+                      className={cn(
+                        "relative group cursor-pointer",
+                        iscopied && "bg-green-50 dark:bg-green-950/20"
+                      )}
+                      onClick={() => handleCopyCell(row[column], cellId)}
                     >
-                      {String(key).split("_").join(" ")}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {paginatedResults.map((row, idx) => (
-                  <tr
-                    key={idx}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                  >
-                    {headers.map((key) => (
-                      <td
-                        key={key}
-                        className="px-4 py-3 text-sm text-gray-900 dark:text-white"
-                      >
-                        <div
-                          className="max-w-xs truncate"
-                          title={
-                            row[key] === null || row[key] === undefined
-                              ? "-"
-                              : String(row[key])
-                          }
-                        >
-                          {row[key] === null || row[key] === undefined
-                            ? "-"
-                            : String(row[key])}
-                        </div>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+                      {formatCellValue(row[column], columnTypes[column])}
+                      {iscopied && (
+                        <span className="absolute top-1 right-1 text-xs text-green-600">
+                          Copied!
+                        </span>
+                      )}
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
 
-      {/* Pagination Controls */}
-      {shouldPaginate && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            Showing{" "}
-            <span className="font-medium text-gray-900 dark:text-white">
-              {startIndex + 1}
-            </span>{" "}
-            to{" "}
-            <span className="font-medium text-gray-900 dark:text-white">
-              {endIndex}
-            </span>{" "}
-            of{" "}
-            <span className="font-medium text-gray-900 dark:text-white">
-              {totalRows}
-            </span>{" "}
-            results
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Showing {(currentPage - 1) * pageSize + 1} to{" "}
+            {Math.min(currentPage * pageSize, data.length)} of {data.length}{" "}
+            rows
           </div>
-
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => goToPage(currentPage - 1)}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <ChevronLeft className="h-4 w-4 mr-1" />
+              <ChevronLeft className="h-3 w-3" />
               Previous
-            </button>
-
-            <div className="flex items-center gap-1">
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                Page{" "}
-                <span className="font-medium text-gray-900 dark:text-white">
-                  {currentPage}
-                </span>{" "}
-                of{" "}
-                <span className="font-medium text-gray-900 dark:text-white">
-                  {totalPages}
-                </span>
-              </span>
-            </div>
-
-            <button
-              onClick={() => goToPage(currentPage + 1)}
+            </Button>
+            <span className="text-sm">
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Next
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </button>
+              <ChevronRight className="h-3 w-3" />
+            </Button>
           </div>
         </div>
       )}
