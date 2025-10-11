@@ -1,13 +1,14 @@
 // components/ChatLayoutWrapper.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Menu } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import ChatInterface from "@/components/ChatInterface";
 import ChatSidebar from "@/components/ChatSidebar";
+import { useSessionData } from "@/hooks/useSessionData";
 
 interface ChatLayoutWrapperProps {
   sessionId?: string;
@@ -17,49 +18,85 @@ export default function ChatLayoutWrapper({
   sessionId,
 }: Readonly<ChatLayoutWrapperProps>) {
   const searchParams = useSearchParams();
-  const [connectionId, setConnectionId] = useState<string>("");
+  const router = useRouter();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  // Get connection from URL or session
-  useEffect(() => {
-    // First check URL params
-    const urlConnection = searchParams.get("connection");
-    if (urlConnection) {
-      setConnectionId(urlConnection);
-      // Store in localStorage for persistence
-      localStorage.setItem("lastConnectionId", urlConnection);
-    } else if (sessionId) {
-      // Load connection from session
-      fetch(`/api/chat/sessions/${sessionId}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.session?.connectionId) {
-            setConnectionId(data.session.connectionId);
-            localStorage.setItem("lastConnectionId", data.session.connectionId);
-          }
-        })
-        .catch((err) =>
-          console.error("Failed to load session connection:", err)
-        );
-    } else {
-      // Fall back to last used connection
-      const lastConnection = localStorage.getItem("lastConnectionId");
-      if (lastConnection && lastConnection !== "undefined") {
-        setConnectionId(lastConnection);
-      }
-    }
-  }, [searchParams, sessionId]);
+  // Initialize connectionId from localStorage immediately to prevent flicker
+  const [connectionId, setConnectionId] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
 
-  if (!connectionId) {
+    // Check URL first
+    const urlConnection = searchParams.get("connection");
+    if (urlConnection) return urlConnection;
+
+    // Fall back to localStorage
+    const lastConnection = localStorage.getItem("lastConnectionId");
+    return lastConnection && lastConnection !== "undefined"
+      ? lastConnection
+      : "";
+  });
+
+  // Use SWR to get session data if we have a sessionId
+  const { session, isLoading } = useSessionData(sessionId);
+
+  // Update connectionId when we get session data or URL changes
+  useEffect(() => {
+    const urlConnection = searchParams.get("connection");
+
+    if (urlConnection) {
+      // URL parameter takes highest priority
+      setConnectionId(urlConnection);
+      localStorage.setItem("lastConnectionId", urlConnection);
+    } else if (session?.connectionId) {
+      // Use connection from session if available
+      setConnectionId(session.connectionId);
+      localStorage.setItem("lastConnectionId", session.connectionId);
+    }
+  }, [searchParams, session]);
+
+  // Determine if we should show the "no connection" state
+  // Only show it if:
+  // 1. We don't have a connectionId AND
+  // 2. We're not loading a session (which might provide one) AND
+  // 3. We've checked localStorage
+  const shouldShowNoConnection = useMemo(() => {
+    // If we have a connectionId, we're good
+    if (connectionId) return false;
+
+    // If we're loading a session, wait for it
+    if (sessionId && isLoading) return false;
+
+    // If we have a sessionId but finished loading and still no connection, show error
+    if (sessionId && !isLoading && !session?.connectionId) return true;
+
+    // If no sessionId and no connectionId from localStorage, show error
+    if (!sessionId && !connectionId) return true;
+
+    return false;
+  }, [connectionId, sessionId, isLoading, session]);
+
+  if (shouldShowNoConnection) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <p className="text-muted-foreground mb-4">
             No database connection selected
           </p>
-          <Button onClick={() => (window.location.href = "/connections")}>
+          <Button onClick={() => router.push("/connections")}>
             Select a Connection
           </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show a minimal loading state only if we truly don't have a connectionId yet
+  if (!connectionId) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
     );
