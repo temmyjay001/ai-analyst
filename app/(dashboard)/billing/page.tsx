@@ -91,7 +91,7 @@ export default function BillingPage() {
 
   const handleContactSales = () => {
     window.location.href =
-      "mailto:sales@dw?subject=Enterprise Plan Inquiry";
+      "mailto:sales@whoprompt.com?subject=Enterprise Plan Inquiry";
   };
 
   if (loading) {

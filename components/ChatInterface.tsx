@@ -323,6 +323,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         {(streaming || showError) && (
           <UnifiedMessage
             isStreaming={true}
+            session={session ?? undefined}
             status={status}
             streamingSql={sql}
             streamingInterpretation={interpretation}

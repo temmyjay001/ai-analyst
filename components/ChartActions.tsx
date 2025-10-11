@@ -202,7 +202,11 @@ export function ChartActions({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           dashboardId: selectedDashboard,
+          title: chartData.title,
+          chartType: chartData.vizConfig.type,
           connectionId: chartData.connectionId,
+          sessionId: chartData.sessionId,
+          messageId: chartData.messageId,
           sql: chartData.sql,
           question: chartData.question,
           vizConfig: chartData.vizConfig,

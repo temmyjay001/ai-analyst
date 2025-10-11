@@ -118,7 +118,7 @@ export default function UnifiedMessage({
           <Bot className="h-5 w-5 text-blue-600 dark:text-blue-400" />
         </div>
       </div>
-      <div className="flex-1 space-y-4">
+      <div className="flex-1 space-y-4 overflow-x-hidden">
         {/* Status Indicator - Only show while streaming */}
         {isStreaming && status && !error && (
           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">

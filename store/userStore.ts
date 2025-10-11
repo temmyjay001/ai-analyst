@@ -9,12 +9,28 @@ interface UsageData {
   monthlyLimit: number;
 }
 
+interface UserData {
+  id: string;
+  email: string;
+  name: string;
+  emailVerified: Date | null;
+}
+
 interface UserState {
+  // User identity
+  user: UserData | null;
+
+  // Plan and usage
   plan: string;
   usage: UsageData | null;
+
+  // State management
   loading: boolean;
   initialized: boolean;
   lastFetched: number | null;
+
+  // Actions
+  setUser: (user: UserData) => void;
   setPlan: (plan: string) => void;
   setUsage: (usage: UsageData) => void;
   setLoading: (loading: boolean) => void;
@@ -24,29 +40,29 @@ interface UserState {
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+const initialState = {
+  user: null,
+  plan: "free",
+  usage: null,
+  loading: false,
+  initialized: false,
+  lastFetched: null,
+};
+
 export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
-      plan: "free",
-      usage: null,
-      loading: false,
-      initialized: false,
-      lastFetched: null,
+      ...initialState,
 
-      resetUserStore: () =>
-        set({
-          plan: "free",
-          usage: null,
-          loading: false,
-          initialized: false,
-          lastFetched: null,
-        }),
+      setUser: (user) => set({ user }),
 
       setPlan: (plan) => set({ plan }),
 
       setUsage: (usage) => set({ usage }),
 
       setLoading: (loading) => set({ loading }),
+
+      resetUserStore: () => set(initialState),
 
       fetchUserData: async (force = false) => {
         const state = get();
@@ -97,9 +113,10 @@ export const useUserStore = create<UserState>()(
       },
     }),
     {
-      name: "user-storage", // localStorage key
+      name: "user-storage",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        user: state.user,
         plan: state.plan,
         usage: state.usage,
         initialized: state.initialized,

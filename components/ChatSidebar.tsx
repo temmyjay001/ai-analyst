@@ -1,12 +1,28 @@
 // components/ChatSidebar.tsx
-
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { MessageSquare, Trash2, Edit2, Plus, Loader2 } from "lucide-react";
-import { ChatSession } from "@/types/chat";
+import {
+  MessageSquare,
+  Plus,
+  Edit2,
+  Trash2,
+  Loader2,
+  X,
+  Menu,
+  ChevronLeft,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+
+interface ChatSession {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messageCount: number;
+}
 
 export default function ChatSidebar() {
   const router = useRouter();
@@ -15,46 +31,28 @@ export default function ChatSidebar() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const currentSessionId = pathname.split("/").pop();
 
   useEffect(() => {
     fetchSessions();
-  }, []);
 
-  useEffect(() => {
-    const handleSessionUpdate = (event: CustomEvent) => {
-      const { sessionId } = event.detail;
-      // Just update the timestamp for this session
-      setSessions((prev) =>
-        prev
-          .map((s) =>
-            s.id === sessionId ? { ...s, updatedAt: new Date() } : s
-          )
-          .sort(
-            (a, b) =>
-              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-          )
-      );
+    const handleSessionUpdate = () => {
+      fetchSessions();
     };
 
-    window.addEventListener(
-      "session-updated",
-      handleSessionUpdate as EventListener
-    );
-
-    return () => {
-      window.removeEventListener(
-        "session-updated",
-        handleSessionUpdate as EventListener
-      );
-    };
+    window.addEventListener("session-updated", handleSessionUpdate);
+    return () =>
+      window.removeEventListener("session-updated", handleSessionUpdate);
   }, []);
 
   const fetchSessions = async () => {
     try {
-      const response = await fetch("/api/sessions?limit=50");
+      const response = await fetch("/api/sessions");
       if (response.ok) {
         const data = await response.json();
-        setSessions(data.sessions);
+        setSessions(data.sessions || []);
       }
     } catch (error) {
       console.error("Failed to fetch sessions:", error);
@@ -65,36 +63,12 @@ export default function ChatSidebar() {
 
   const handleNewChat = () => {
     router.push("/app");
+    setMobileOpen(false);
   };
 
   const handleSelectSession = (sessionId: string) => {
     router.push(`/app/${sessionId}`);
-  };
-
-  const handleDeleteSession = async (
-    sessionId: string,
-    e: React.MouseEvent
-  ) => {
-    e.stopPropagation();
-
-    if (!confirm("Delete this conversation?")) return;
-
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-
-        // If we're on the deleted session, go to new chat
-        if (pathname === `/app/${sessionId}`) {
-          router.push("/app");
-        }
-      }
-    } catch (error) {
-      console.error("Failed to delete session:", error);
-    }
+    setMobileOpen(false);
   };
 
   const handleStartEdit = (session: ChatSession, e: React.MouseEvent) => {
@@ -105,7 +79,7 @@ export default function ChatSidebar() {
 
   const handleSaveEdit = async (sessionId: string) => {
     if (!editTitle.trim()) {
-      setEditingId(null);
+      handleCancelEdit();
       return;
     }
 
@@ -127,6 +101,7 @@ export default function ChatSidebar() {
       console.error("Failed to update session:", error);
     } finally {
       setEditingId(null);
+      setEditTitle("");
     }
   };
 
@@ -135,50 +110,64 @@ export default function ChatSidebar() {
     setEditTitle("");
   };
 
-  // Group sessions by date
+  const handleDeleteSession = async (
+    sessionId: string,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+
+    if (!confirm("Delete this conversation?")) return;
+
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+        if (currentSessionId === sessionId) {
+          router.push("/app");
+        }
+      }
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+    }
+  };
+
   const groupedSessions = sessions.reduce((acc, session) => {
     const date = new Date(session.updatedAt);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    const now = new Date();
+    const diffInDays = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
+    );
 
-    let group = "";
-    if (date.toDateString() === today.toDateString()) {
-      group = "Today";
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      group = "Yesterday";
-    } else if (date > new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)) {
-      group = "Last 7 Days";
-    } else if (date > new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
-      group = "Last 30 Days";
-    } else {
-      group = "Older";
-    }
+    let group;
+    if (diffInDays === 0) group = "Today";
+    else if (diffInDays === 1) group = "Yesterday";
+    else if (diffInDays < 7) group = "Last 7 days";
+    else if (diffInDays < 30) group = "Last 30 days";
+    else group = "Older";
 
-    if (!acc[group]) {
-      acc[group] = [];
-    }
+    if (!acc[group]) acc[group] = [];
     acc[group].push(session);
     return acc;
   }, {} as Record<string, ChatSession[]>);
 
-  const currentSessionId = pathname.split("/").pop();
-
-  return (
-    <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col ">
+  const SidebarContent = () => (
+    <div className="h-full flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <button
+        <Button
           onClick={handleNewChat}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
         >
-          <Plus className="h-4 w-4" />
-          <span className="font-medium">New Chat</span>
-        </button>
+          <Plus className="h-4 w-4 mr-2" />
+          New Chat
+        </Button>
       </div>
 
       {/* Sessions List */}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto p-4">
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -208,7 +197,6 @@ export default function ChatSidebar() {
                     }`}
                   >
                     <div className="flex items-start gap-2">
-                      {/* <MessageSquare className="h-4 w-4 mt-0.5 flex-shrink-0" /> */}
                       <div className="flex-1 min-w-0">
                         {editingId === session.id ? (
                           <input
@@ -268,5 +256,30 @@ export default function ChatSidebar() {
         )}
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar - Always visible on md+ screens */}
+      <div className="hidden md:block w-64 h-full">
+        <SidebarContent />
+      </div>
+
+      {/* Mobile Sidebar - Sheet on mobile */}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetTrigger asChild className="md:hidden fixed top-20 left-4 z-40">
+          <Button
+            size="icon"
+            variant="outline"
+            className="rounded-full shadow-lg bg-white dark:bg-gray-800"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="p-0 w-[280px]">
+          <SidebarContent />
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
