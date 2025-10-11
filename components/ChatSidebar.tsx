@@ -1,8 +1,8 @@
 // components/ChatSidebar.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   MessageSquare,
   Plus,
@@ -25,14 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { toast } from "sonner";
-
-interface ChatSession {
-  id: string;
-  title: string;
-  messageCount: number;
-  updatedAt: string;
-}
+import { useChatSessions } from "@/hooks/useChatSessions";
 
 interface ChatSidebarProps {
   connectionId: string;
@@ -44,36 +37,10 @@ export default function ChatSidebar({
   currentSessionId,
 }: Readonly<ChatSidebarProps>) {
   const router = useRouter();
-  const pathname = usePathname();
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [loading, setLoading] = useState(false);
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
 
-  // Load sessions
-  useEffect(() => {
-    if (connectionId) {
-      loadSessions();
-    }
-  }, [connectionId]);
-
-  const loadSessions = async () => {
-    if (!connectionId) return;
-
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `/api/chat/sessions?connectionId=${connectionId}&limit=20`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setSessions(data.sessions || []);
-      }
-    } catch (error) {
-      console.error("Error loading sessions:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Use SWR hook for sessions
+  const { sessions, isLoading, deleteSession } = useChatSessions(connectionId);
 
   const handleNewChat = () => {
     router.push("/app");
@@ -84,28 +51,14 @@ export default function ChatSidebar({
   };
 
   const handleDeleteSession = async (sessionId: string) => {
-    try {
-      const response = await fetch(`/api/chat/sessions/${sessionId}`, {
-        method: "DELETE",
-      });
+    await deleteSession(sessionId);
 
-      if (response.ok) {
-        toast.success("Conversation deleted");
-        setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-
-        // If deleting current session, navigate to new chat
-        if (sessionId === currentSessionId) {
-          router.push("/app");
-        }
-      } else {
-        throw new Error("Failed to delete");
-      }
-    } catch (error) {
-      console.error("Error deleting session:", error);
-      toast.error("Failed to delete conversation");
-    } finally {
-      setDeleteSessionId(null);
+    // If deleting current session, navigate to new chat
+    if (sessionId === currentSessionId) {
+      router.push("/app");
     }
+
+    setDeleteSessionId(null);
   };
 
   return (
@@ -132,7 +85,7 @@ export default function ChatSidebar({
               Recent Conversations
             </div>
 
-            {loading ? (
+            {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
@@ -204,7 +157,7 @@ export default function ChatSidebar({
       {/* Delete Confirmation Dialog */}
       <AlertDialog
         open={!!deleteSessionId}
-        onOpenChange={() => setDeleteSessionId(null)}
+        onOpenChange={(open) => !open && setDeleteSessionId(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>

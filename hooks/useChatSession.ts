@@ -1,8 +1,9 @@
 // hooks/useChatSession.ts
-import { useState, useEffect, useCallback } from "react";
-import { ChatMessage, ChatSession } from "@/types/chat";
+import { useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { toast } from "sonner";
+import { ChatMessage, ChatSession } from "@/types/chat";
+import { useSessionData } from "@/hooks/useSessionData";
+import { addSessionToCache } from "@/hooks/useChatSessions";
 
 interface UseChatSessionProps {
   initialSessionId?: string;
@@ -15,48 +16,25 @@ export function useChatSession({
 }: UseChatSessionProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [session, setSession] = useState<ChatSession | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(false);
 
-  // Load session and messages
-  useEffect(() => {
-    if (initialSessionId) {
-      loadSession(initialSessionId);
-    }
-  }, [initialSessionId]);
+  const {
+    session,
+    messages,
+    isLoading: loading,
+    addMessage: addMessageToCache,
+    clearSession: clearSessionCache,
+  } = useSessionData(initialSessionId);
 
-  const loadSession = useCallback(async (sessionId: string) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/chat/sessions/${sessionId}`);
-      if (!response.ok) {
-        throw new Error("Failed to load session");
-      }
-
-      const data = await response.json();
-      setSession(data.session);
-      setMessages(data.messages || []);
-    } catch (error) {
-      console.error("Error loading session:", error);
-      toast.error("Failed to load conversation");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  /**
+   * Create a new session and add to cache
+   */
   const createSession = useCallback(
     (sessionId: string, title: string) => {
-      const newSession: ChatSession = {
+      // Add to sessions list cache
+      addSessionToCache(connectionId, {
         id: sessionId,
-        userId: "", // Will be set by server
-        connectionId,
         title,
-        messageCount: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      setSession(newSession);
+      });
 
       // Update URL to include session ID
       if (pathname === "/app") {
@@ -66,85 +44,39 @@ export function useChatSession({
     [connectionId, pathname, router]
   );
 
+  /**
+   * Add a message to the session
+   */
   const addMessage = useCallback(
     (message: ChatMessage) => {
-      setMessages((prev) => [...prev, message]);
-
-      // Update session message count
-      if (session) {
-        setSession((prev) =>
-          prev
-            ? {
-                ...prev,
-                messageCount: prev.messageCount + 1,
-                updatedAt: new Date(),
-              }
-            : null
-        );
-      }
+      addMessageToCache(message);
     },
-    [session]
+    [addMessageToCache]
   );
 
-  const updateLastMessage = useCallback((updates: Partial<ChatMessage>) => {
-    setMessages((prev) => {
-      if (prev.length === 0) return prev;
+  /**
+   * Update the last message in the session
+   */
+  const updateLastMessage = useCallback(
+    (updates: Partial<ChatMessage>) => {
+      if (!initialSessionId || messages.length === 0) return;
 
-      const newMessages = [...prev];
-      const lastIndex = newMessages.length - 1;
-      newMessages[lastIndex] = { ...newMessages[lastIndex], ...updates };
+      const lastMessage = messages[messages.length - 1];
 
-      return newMessages;
-    });
-  }, []);
+      // Import and use the updateMessageInCache helper
+      import("@/hooks/useSessionData").then(({ updateMessageInCache }) => {
+        updateMessageInCache(initialSessionId, lastMessage.id, updates);
+      });
+    },
+    [initialSessionId, messages]
+  );
 
+  /**
+   * Clear session
+   */
   const clearSession = useCallback(() => {
-    setSession(null);
-    setMessages([]);
-
-    // Navigate to base chat URL
-    if (pathname !== "/app") {
-      router.push("/app");
-    }
-  }, [pathname, router]);
-
-  const deleteSession = useCallback(
-    async (sessionId: string) => {
-      try {
-        const response = await fetch(`/api/chat/sessions/${sessionId}`, {
-          method: "DELETE",
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to delete session");
-        }
-
-        toast.success("Conversation deleted");
-        clearSession();
-      } catch (error) {
-        console.error("Error deleting session:", error);
-        toast.error("Failed to delete conversation");
-      }
-    },
-    [clearSession]
-  );
-
-  const loadRecentSessions = useCallback(async () => {
-    try {
-      const response = await fetch(
-        `/api/chat/sessions?connectionId=${connectionId}&limit=10`
-      );
-      if (!response.ok) {
-        throw new Error("Failed to load sessions");
-      }
-
-      const data = await response.json();
-      return data.sessions;
-    } catch (error) {
-      console.error("Error loading recent sessions:", error);
-      return [];
-    }
-  }, [connectionId]);
+    clearSessionCache();
+  }, [clearSessionCache]);
 
   return {
     // State
@@ -153,12 +85,9 @@ export function useChatSession({
     loading,
 
     // Actions
-    loadSession,
     createSession,
     addMessage,
     updateLastMessage,
     clearSession,
-    deleteSession,
-    loadRecentSessions,
   };
 }
